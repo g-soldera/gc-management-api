@@ -92,6 +92,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             status_piercing_caos: { type: 'string', description: 'Chaos Piercing obtained status' },
             status_solene_semanal: { type: 'string', description: 'Weekly Solene status: minimum 5 runs in any Solene map (Other World)' },
             status_berkas_diario: { type: 'string', description: 'Daily Berkas completion status for this character' },
+            status_anel: { type: 'string', description: 'Ring accessory obtained status (e.g., Obtido, Não obtido)' },
+            tipo_anel: { type: 'string', description: 'Ring type: Esmaecido, Silencioso, Sangrento, Caos' },
+            status_tornozeleira: { type: 'string', description: 'Ankle bracelet accessory obtained status (e.g., Obtido, Não obtido)' },
+            tipo_tornozeleira: { type: 'string', description: 'Ankle bracelet type: Eternidade, Redenção, Perfeição, Caos' },
+            anotacoes: { type: 'string', description: 'Free-text notes and observations for the character (max 5000 chars)' },
             discord_id: { type: 'string', description: 'Discord user ID (required for permission check)' },
           },
           required: ['username', 'char_name', 'discord_id'],
@@ -141,9 +146,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {
             username: { type: 'string', description: 'Player account username' },
-            field_name: { 
+            field_name: {
               type: 'string', 
-              description: 'Field to update. Allowed: nivel, status_despertar, status_void_unificado_semanal, status_void_4_semanal, status_wl_semanal, status_fornalha_infernal_semanal, status_altar_ruina_semanal, status_tod_diario, status_abissal_semanal, status_claustro_infinito_diario, status_brinco_caos, status_piercing_caos, status_solene_semanal, status_berkas_diario',
+              description: 'Field to update. Allowed: nivel, status_despertar, weekly/daily mission status, accessories (status_anel, tipo_anel, status_tornozeleira, tipo_tornozeleira)',
               enum: [
                 'nivel',
                 'status_despertar',
@@ -158,7 +163,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 'status_brinco_caos',
                 'status_piercing_caos',
                 'status_solene_semanal',
-                'status_berkas_diario'
+                'status_berkas_diario',
+                'status_anel',
+                'tipo_anel',
+                'status_tornozeleira',
+                'tipo_tornozeleira'
               ]
             },
             field_value: { type: 'string', description: 'Value to set for this field (e.g., "Feito", "Despertado", "90")' },
