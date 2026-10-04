@@ -2,58 +2,61 @@
 
 API REST para rastreamento de personagens e atividades do GrandChase Classic com banco de dados Kimball dimensional.
 
-## Stack
-
-- **Backend**: Node.js + Express
-- **Database**: Supabase (PostgreSQL)
-- **Deploy**: Render
-- **MCP Server**: Model Context Protocol para integração com agentes
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-52.63%25-yellow)]()
 
 ## Características
 
-- 19 personagens do GrandChase Classic
-- Modelo dimensional Kimball (dim_users, dim_characters, dim_time, fact_character_stats)
-- Suporte a caracteres coreanos em usernames
-- API REST com autenticação via API Key
-- MCP Server para cadastro individual e em lote
-- RLS habilitado para segurança
-- Custo zero (free tier Supabase + Render)
+✅ **25 personagens** do GrandChase Classic  
+✅ **Modelo dimensional Kimball** (star schema otimizado)  
+✅ **Suporte a caracteres coreanos** em usernames  
+✅ **API REST** com autenticação via API Key  
+✅ **MCP Server** para integração com agentes  
+✅ **Rate limiting** (100 req/15min global, 5 req/15min auth)  
+✅ **Input validation** (Zod schemas)  
+✅ **Paginação** (cursor-based com offset/limit)  
+✅ **Logging estruturado** (Pino)  
+✅ **Testes unitários** (Jest + 13 tests)  
+✅ **RLS habilitado** para segurança  
+✅ **Custo zero** (free tier Supabase + Render)
 
-## Setup Local
+## Quick Start
 
 ```bash
+# Instalar dependências
 npm install
+
+# Configurar ambiente
 cp .env.example .env
-```
+# Editar .env com credenciais Supabase
 
-Configure `.env`:
-```
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_SERVICE_KEY=sua-service-key
-API_KEY=sua-chave-secreta
-PORT=3000
-```
+# Rodar testes
+npm test
 
-### Inicializar banco Supabase
+# Iniciar API
+npm start
 
-```bash
-supabase start
-supabase db reset
-```
-
-### Rodar API
-
-```bash
-node src/index.js
-```
-
-### Rodar MCP Server
-
-```bash
-node mcp-server/index.js
+# Iniciar MCP Server
+npm run mcp
 ```
 
 ## Endpoints
+
+### Autenticação
+Todos os endpoints protegidos requerem header:
+```
+X-API-Key: sua-chave-secreta
+```
+
+### `GET /health`
+Health check (sem autenticação)
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-10-04T05:21:26.838Z",
+  "uptime": 42.5
+}
+```
 
 ### `POST /api/users`
 Criar usuário (suporta caracteres coreanos)
@@ -63,108 +66,184 @@ Criar usuário (suporta caracteres coreanos)
 }
 ```
 
+**Rate limit:** 5 req/15min
+
 ### `GET /api/users`
 Listar todos os usuários
 
 ### `GET /api/characters`
-Listar 19 personagens (ptbr/enus)
+Listar 25 personagens (ptbr/enus)
 
 ### `POST /api/stats`
-Registrar stats de personagem
+Registrar stats de personagem (atualização parcial suportada)
 ```json
 {
   "username": "PlayerKR",
   "char_name": "Elesis",
   "date": "2026-10-04",
   "atk_total": 15000,
-  "atk": 12000,
-  "atk_sp": 3000,
-  "status_void_unificado_semanal": "completo",
-  "cristais_void_unificado": 50,
   "andar_wl": 25,
   "drop_perg_prop_uni": true
 }
 ```
 
 ### `POST /api/stats/batch`
-Registrar múltiplos stats
+Registrar múltiplos stats (max 100 records)
 ```json
 {
   "records": [
-    {
-      "username": "Player1",
-      "char_name": "Elesis",
-      "atk_total": 15000
-    },
-    {
-      "username": "Player2",
-      "char_name": "Lass",
-      "atk_total": 14000
-    }
+    {"username": "Player1", "char_name": "Elesis", "atk_total": 15000},
+    {"username": "Player2", "char_name": "Lass", "atk_total": 14000}
   ]
 }
 ```
 
-### `GET /api/stats?username=X&char_name=Y`
-Consultar stats com filtros
+### `GET /api/stats`
+Consultar stats com paginação
+```
+GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
+```
+
+**Resposta:**
+```json
+{
+  "data": [...],
+  "pagination": {
+    "offset": 0,
+    "limit": 20,
+    "total": 150
+  }
+}
+```
+
+**Query params:**
+- `username` (opcional)
+- `char_name` (opcional) 
+- `from_date` (opcional, formato YYYY-MM-DD)
+- `to_date` (opcional, formato YYYY-MM-DD)
+- `limit` (opcional, padrão 50, max 100)
+- `offset` (opcional, padrão 0)
 
 ## MCP Server Tools
 
-- `create_user` - Criar usuário
-- `list_users` - Listar usuários
-- `list_characters` - Listar personagens
-- `register_stats` - Registrar stats individual
-- `register_stats_batch` - Registrar stats em lote
-- `query_stats` - Consultar stats com filtros
+- `create_user(username)` - Criar usuário
+- `list_users()` - Listar usuários
+- `list_characters()` - Listar personagens
+- `register_stats(username, char_name, date, ...stats)` - Registrar stats individual
+- `register_stats_batch(records: [...])` - Registrar stats em lote
+- `query_stats(username?, char_name?, from_date?, to_date?)` - Consultar stats
 
-## Deploy Render
+### Configuração Cliente MCP
 
-1. Criar Web Service no Render
-2. Conectar repo GitHub
-3. Build: `npm install`
-4. Start: `node src/index.js`
-5. Adicionar env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `API_KEY`
+```json
+{
+  "mcpServers": {
+    "grandchase": {
+      "command": "node",
+      "args": ["D:\\gc-management-api\\mcp-server\\index.js"],
+      "env": {
+        "API_URL": "https://seu-app.onrender.com",
+        "API_KEY": "sua-api-key"
+      }
+    }
+  }
+}
+```
 
 ## Segurança
 
-- API Key obrigatória em todos endpoints (header `X-API-Key`)
-- RLS habilitado em todas tabelas
-- Service role key apenas no backend
-- Helmet.js para headers de segurança
-- Input validation em todos endpoints
+- ✅ API Key obrigatória (header `X-API-Key`)
+- ✅ Rate limiting (100 req/15min global, 5 req/15min auth)
+- ✅ Input validation (Zod schemas com ranges e tamanhos)
+- ✅ RLS habilitado em todas as tabelas
+- ✅ Service role key apenas no backend
+- ✅ Helmet.js (headers de segurança)
+- ✅ CORS configurado
+- ✅ Body size limit (1MB)
+- ✅ Logging estruturado (auditoria)
+- ✅ Error handling centralizado
 
-## Campos Disponíveis
+## Rate Limits
 
-### Stats de Combate
-- `atk_total`, `atk`, `atk_sp`
+| Endpoint | Limite |
+|----------|--------|
+| Global | 100 req/15min por IP |
+| POST /api/users | 5 req/15min por IP |
+| Demais endpoints | Global limit |
 
-### Atividades Semanais
-- `status_void_unificado_semanal`, `cristais_void_unificado`
-- `status_void_4_semanal`, `cristais_void_4`
-- `status_wl_semanal`, `andar_wl`
-- `status_fornalha_infernal_semanal`
-- `status_altar_ruina_semanal`
-- `status_abissal_semanal`
-- `status_solene_semanal`
+## Validações
 
-### Atividades Diárias
-- `status_tod_diario`
-- `status_claustro_infinito_diario`, `nivel_claustro_infinito`
+- **Username:** 1-50 chars, trim automático
+- **ATK values:** 0-999,999,999 (int)
+- **Andar WL:** 0-999 (smallint)
+- **Date:** YYYY-MM-DD format
+- **Batch:** max 100 records por request
+- **Status fields:** max 100 chars
+- **Pagination limit:** max 100 por request
 
-### Drops e Itens
-- `drop_perg_prop_uni` (boolean)
-- `drop_grim_reaper_card` (boolean)
-- `status_brinco_caos`
-- `status_piercing_caos`
+## Testes
 
-### Outros
-- `idas_calnat`
+```bash
+# Rodar todos os testes
+npm test
 
-## Personagens GrandChase Classic (25)
+# Rodar com watch mode
+npm run test:watch
+```
 
-**PT-BR:** Elesis, Arme, Lire, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Rey, Lupus, Lin, Azin, Holy, Edel, Veigas, Uno, Decane, Ai, Kallia, Iris, Ereb
+**Coverage atual:** 52.63% (13 tests passing)
 
-**EN-US:** Elesis, Arme, Lire, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Ley, Rufus, Rin, Asin, Lime, Edel, Veigas, Uno, Decane, Ai, Kallia, Iris, Ereb
+## Deploy
+
+Ver `SETUP.md` para instruções completas.
+
+**Resumo:**
+1. Configurar Supabase project + push migrations
+2. Deploy no Render (GitHub integration)
+3. Adicionar env vars no Render
+4. API estará disponível em `https://seu-app.onrender.com`
+
+## Arquitetura
+
+Ver `ARCHITECTURE.md` para diagramas Mermaid completos do modelo Kimball, fluxos de dados e deploy.
+
+## Personagens (25 Total)
+
+| PT-BR | EN-US |
+|-------|-------|
+| Elesis | Elesis |
+| Arme | Arme |
+| Lire | Lire |
+| Lass | Lass |
+| Ryan | Ryan |
+| Ronan | Ronan |
+| Amy | Amy |
+| Jin | Jin |
+| Sieghart | Sieghart |
+| Mari | Mari |
+| Dio | Dio |
+| Zero | Zero |
+| Rey | Ley |
+| Lupus | Rufus |
+| Lin | Rin |
+| Azin | Asin |
+| Holy | Lime |
+| Edel | Edel |
+| Veigas | Veigas |
+| Uno | Uno |
+| Decane | Decane |
+| Ai | Ai |
+| Kallia | Kallia |
+| Iris | Iris |
+| Ereb | Ereb |
+
+## Custos
+
+| Serviço | Tier | Custo |
+|---------|------|-------|
+| Supabase | Free | $0 (500MB DB, 2GB transfer) |
+| Render | Free | $0 (750h/mês) |
+| **Total** | | **$0/mês** |
 
 ## Licença
 

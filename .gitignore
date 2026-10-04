@@ -11,3 +11,4 @@ supabase/.temp/
 .idea/
 coverage/
 .nyc_output/
+*.tgz

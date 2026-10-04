@@ -2,13 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
+const logger = require('./logger');
+const { validate, createUserSchema, registerStatsSchema, batchStatsSchema, queryStatsSchema } = require('./validators');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY || !process.env.API_KEY) {
-  console.error('Missing required environment variables');
+  logger.error('Missing required environment variables');
   process.exit(1);
 }
 
@@ -19,27 +22,59 @@ const supabase = createClient(
 
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn({ ip: req.ip, path: req.path }, 'Rate limit exceeded');
+    res.status(429).json({ error: 'Too many requests' });
+  }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: 'Too many authentication attempts',
+  skipSuccessfulRequests: true
+});
+
+app.use(limiter);
 
 const authMiddleware = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   if (!apiKey || apiKey !== process.env.API_KEY) {
+    logger.warn({ ip: req.ip, path: req.path }, 'Unauthorized access attempt');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
 };
 
+const errorHandler = (err, req, res, next) => {
+  logger.error({ err, path: req.path }, 'Unhandled error');
+  if (err.code === '23505') {
+    return res.status(409).json({ error: 'Duplicate entry' });
+  }
+  res.status(500).json({ error: 'Internal server error' });
+};
+
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
-app.post('/api/users', authMiddleware, async (req, res) => {
+app.post('/api/users', authMiddleware, authLimiter, validate(createUserSchema), async (req, res, next) => {
   try {
-    const { username } = req.body;
-    if (!username) {
-      return res.status(400).json({ error: 'Username required' });
-    }
-
+    const { username } = req.validated;
+    
+    logger.info({ username }, 'Creating user');
     const { data, error } = await supabase
       .from('dim_users')
       .insert({ username })
@@ -47,30 +82,34 @@ app.post('/api/users', authMiddleware, async (req, res) => {
       .single();
 
     if (error) throw error;
+    logger.info({ user_id: data.user_id, username }, 'User created');
     res.status(201).json(data);
   } catch (error) {
     if (error.code === '23505') {
+      logger.warn({ username: req.validated.username }, 'Duplicate username');
       return res.status(409).json({ error: 'Username already exists' });
     }
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
-app.get('/api/users', authMiddleware, async (req, res) => {
+app.get('/api/users', authMiddleware, async (req, res, next) => {
   try {
+    logger.info('Fetching users list');
     const { data, error } = await supabase
       .from('dim_users')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
+    logger.info({ count: data?.length }, 'Users fetched');
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
-app.get('/api/characters', authMiddleware, async (req, res) => {
+app.get('/api/characters', authMiddleware, async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('dim_characters')
@@ -80,18 +119,15 @@ app.get('/api/characters', authMiddleware, async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
-app.post('/api/stats', authMiddleware, async (req, res) => {
+app.post('/api/stats', authMiddleware, validate(registerStatsSchema), async (req, res, next) => {
   try {
-    const { username, char_name, date, ...stats } = req.body;
+    const { username, char_name, date, ...stats } = req.validated;
 
-    if (!username || !char_name) {
-      return res.status(400).json({ error: 'Username and char_name required' });
-    }
-
+    logger.info({ username, char_name }, 'Registering stats');
     const { data: user, error: userError } = await supabase
       .from('dim_users')
       .select('user_id')
@@ -99,6 +135,7 @@ app.post('/api/stats', authMiddleware, async (req, res) => {
       .single();
 
     if (userError || !user) {
+      logger.warn({ username }, 'User not found');
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -109,6 +146,7 @@ app.post('/api/stats', authMiddleware, async (req, res) => {
       .single();
 
     if (charError || !char) {
+      logger.warn({ char_name }, 'Character not found');
       return res.status(404).json({ error: 'Character not found' });
     }
 
@@ -128,20 +166,18 @@ app.post('/api/stats', authMiddleware, async (req, res) => {
       .single();
 
     if (error) throw error;
+    logger.info({ fact_id: data.fact_id, username, char_name }, 'Stats registered');
     res.status(201).json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
-app.post('/api/stats/batch', authMiddleware, async (req, res) => {
+app.post('/api/stats/batch', authMiddleware, validate(batchStatsSchema), async (req, res, next) => {
   try {
-    const { records } = req.body;
+    const { records } = req.validated;
 
-    if (!Array.isArray(records) || records.length === 0) {
-      return res.status(400).json({ error: 'Records array required' });
-    }
-
+    logger.info({ count: records.length }, 'Batch registering stats');
     const results = [];
     const errors = [];
 
@@ -188,19 +224,23 @@ app.post('/api/stats/batch', authMiddleware, async (req, res) => {
         if (error) throw error;
         results.push(data);
       } catch (err) {
+        logger.warn({ username, char_name, error: err.message }, 'Batch record failed');
         errors.push({ username, char_name, error: err.message });
       }
     }
 
+    logger.info({ success: results.length, errors: errors.length }, 'Batch complete');
     res.status(201).json({ success: results.length, results, errors });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
-app.get('/api/stats', authMiddleware, async (req, res) => {
+app.get('/api/stats', authMiddleware, validate(queryStatsSchema), async (req, res, next) => {
   try {
-    const { username, char_name, from_date, to_date } = req.query;
+    const { username, char_name, from_date, to_date, limit = 50, offset = 0 } = req.validated;
+
+    logger.info({ username, char_name, limit, offset }, 'Querying stats');
 
     let query = supabase
       .from('fact_character_stats')
@@ -209,7 +249,7 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
         dim_users (username),
         dim_characters (char_name_ptbr, char_name_enus),
         dim_time (date)
-      `);
+      `, { count: 'exact' });
 
     if (username) {
       const { data: user } = await supabase
@@ -229,17 +269,29 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
       if (char) query = query.eq('char_id', char.char_id);
     }
 
-    query = query.order('created_at', { ascending: false }).limit(100);
+    query = query.order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) throw error;
-    res.json(data);
+    
+    res.json({
+      data,
+      pagination: {
+        offset,
+        limit,
+        total: count
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 });
 
+app.use(errorHandler);
+
 app.listen(PORT, () => {
-  console.log(`GrandChase API running on port ${PORT}`);
+  logger.info({ port: PORT, env: process.env.NODE_ENV }, 'API started');
 });
+

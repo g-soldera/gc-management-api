@@ -6,9 +6,17 @@
   "scripts": {
     "start": "node src/index.js",
     "mcp": "node mcp-server/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
   },
-  "keywords": ["grandchase", "classic", "api", "supabase", "mcp"],
+  "keywords": [
+    "grandchase",
+    "classic",
+    "api",
+    "supabase",
+    "mcp"
+  ],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
@@ -22,5 +30,11 @@
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "helmet": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1"
   }
 }
