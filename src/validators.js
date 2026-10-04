@@ -12,6 +12,8 @@ const registerStatsSchema = z.object({
   char_name: z.string().min(1).max(50).trim(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   
+  nivel: z.number().int().min(0).max(999).optional(),
+  status_despertar: z.string().max(100).optional(),
   atk_total: z.number().int().min(0).max(999999999).optional(),
   atk: z.number().int().min(0).max(999999999).optional(),
   atk_sp: z.number().int().min(0).max(999999999).optional(),
@@ -25,15 +27,16 @@ const registerStatsSchema = z.object({
   status_fornalha_infernal_semanal: z.string().max(100).optional(),
   status_altar_ruina_semanal: z.string().max(100).optional(),
   status_tod_diario: z.string().max(100).optional(),
-  drop_perg_prop_uni: z.boolean().optional(),
+  drop_perg_prop_uni: z.number().int().min(0).max(99999).optional(),
   status_abissal_semanal: z.string().max(100).optional(),
-  drop_grim_reaper_card: z.boolean().optional(),
+  drop_grim_reaper_card: z.number().int().min(0).max(99999).optional(),
   status_claustro_infinito_diario: z.string().max(100).optional(),
   nivel_claustro_infinito: z.number().int().min(0).max(999).optional(),
-  idas_calnat: z.number().int().min(0).max(999).optional(),
+  idas_calnat: z.number().int().min(0).max(999999).optional(),
   status_brinco_caos: z.string().max(100).optional(),
   status_piercing_caos: z.string().max(100).optional(),
-  status_solene_semanal: z.string().max(100).optional()
+  status_solene_semanal: z.string().max(100).optional(),
+  status_berkas_diario: z.string().max(100).optional()
 });
 
 const batchStatsSchema = z.object({
@@ -47,6 +50,28 @@ const queryStatsSchema = z.object({
   to_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(1).max(100)).optional(),
   offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().min(0)).optional()
+});
+
+const updateAllCharsSchema = z.object({
+  username: z.string().min(1).max(50).trim(),
+  field_name: z.enum([
+    'nivel',
+    'status_despertar',
+    'status_void_unificado_semanal',
+    'status_void_4_semanal',
+    'status_wl_semanal',
+    'status_fornalha_infernal_semanal',
+    'status_altar_ruina_semanal',
+    'status_tod_diario',
+    'status_abissal_semanal',
+    'status_claustro_infinito_diario',
+    'status_brinco_caos',
+    'status_piercing_caos',
+    'status_solene_semanal',
+    'status_berkas_diario'
+  ]),
+  field_value: z.string().max(100).trim(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
 
 const validate = (schema) => (req, res, next) => {
@@ -70,5 +95,6 @@ module.exports = {
   registerStatsSchema,
   batchStatsSchema,
   queryStatsSchema,
+  updateAllCharsSchema,
   validate
 };

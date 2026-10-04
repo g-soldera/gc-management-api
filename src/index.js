@@ -5,7 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const logger = require('./logger');
-const { validate, createUserSchema, registerStatsSchema, batchStatsSchema, queryStatsSchema } = require('./validators');
+const { validate, createUserSchema, registerStatsSchema, batchStatsSchema, queryStatsSchema, updateAllCharsSchema } = require('./validators');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -285,6 +285,33 @@ app.get('/api/stats', authMiddleware, validate(queryStatsSchema), async (req, re
       }
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/stats/update-all-chars', authMiddleware, validate(updateAllCharsSchema), async (req, res, next) => {
+  try {
+    const { username, field_name, field_value, date } = req.validated;
+
+    logger.info({ username, field_name, field_value }, 'Updating stat for all characters');
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    const { data, error } = await supabase.rpc('update_stat_all_chars', {
+      p_username: username,
+      p_field_name: field_name,
+      p_field_value: field_value,
+      p_date: targetDate
+    });
+
+    if (error) throw error;
+    
+    logger.info({ username, updated_count: data[0].updated_count }, 'All characters updated');
+    res.status(200).json(data[0]);
+  } catch (error) {
+    if (error.message?.includes('User not found')) {
+      return res.status(404).json({ error: error.message });
+    }
     next(error);
   }
 });
