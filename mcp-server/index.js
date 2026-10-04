@@ -228,6 +228,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['username'],
         },
       },
+      {
+        name: 'extract_stats_from_image',
+        description: 'Extract character stats from screenshot using OCR (GPT-4o Vision). Returns structured JSON with atk, atk_sp, nivel, status_despertar, and accessories if visible.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            image_url: { type: 'string', description: 'Public URL of screenshot image (PNG, JPG)' },
+            image_base64: { type: 'string', description: 'Base64-encoded image data (alternative to image_url)' },
+            char_name: { type: 'string', description: 'Character name hint for better extraction (optional)' },
+          },
+        },
+      },
     ],
   };
 });
@@ -380,6 +392,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify(permData, null, 2),
+            },
+          ],
+        };
+
+      case 'extract_stats_from_image':
+        const ocrData = await makeRequest('/api/ocr/extract-stats', 'POST', args);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `OCR extraction complete (confidence: ${ocrData.extracted.confidence}):\n${JSON.stringify(ocrData.extracted, null, 2)}\n\nUse these values with register_stats tool.`,
             },
           ],
         };

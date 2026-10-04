@@ -452,6 +452,7 @@ app.post('/api/stats/update-all-chars', authMiddleware, validate(updateAllCharsS
 
 // Maintenance endpoints (automated reset)
 const { resetWeeklyMissions, resetDailyMissions } = require('./maintenance');
+const { extractStatsFromImage } = require('./ocr');
 
 app.post('/api/maintenance/reset-weekly', authMiddleware, async (req, res, next) => {
   try {
@@ -473,6 +474,34 @@ app.post('/api/maintenance/reset-daily', authMiddleware, async (req, res, next) 
     const result = await resetDailyMissions(date);
     res.status(200).json(result);
   } catch (error) {
+    next(error);
+  }
+});
+
+// OCR endpoint (GPT-4o Vision)
+app.post('/api/ocr/extract-stats', authMiddleware, async (req, res, next) => {
+  try {
+    const { image_url, image_base64, char_name } = req.body;
+    
+    if (!image_url && !image_base64) {
+      return res.status(400).json({ error: 'image_url or image_base64 required' });
+    }
+    
+    const imageInput = image_url || `data:image/png;base64,${image_base64}`;
+    
+    logger.info({ char_name, has_url: !!image_url, has_base64: !!image_base64 }, 'OCR extraction requested');
+    
+    const extracted = await extractStatsFromImage(imageInput, char_name);
+    
+    res.status(200).json({
+      success: true,
+      extracted,
+      note: 'Use these values with POST /api/stats to register'
+    });
+  } catch (error) {
+    if (error.message.includes('OCR not available')) {
+      return res.status(503).json({ error: error.message });
+    }
     next(error);
   }
 });

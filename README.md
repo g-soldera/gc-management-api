@@ -323,6 +323,70 @@ X-API-Key: sua-chave-secreta
 
 **Configuração de Cron:** Ver seção "Automated Resets" abaixo.
 
+## OCR Endpoint
+
+### `POST /api/ocr/extract-stats`
+**Extrair atributos de personagem via screenshot** (GPT-4o Vision)
+
+Envia imagem de tela de atributos e recebe JSON estruturado com stats extraídos.
+
+**Headers:**
+```
+X-API-Key: sua-chave-secreta
+Content-Type: application/json
+```
+
+**Body (opção 1 - URL):**
+```json
+{
+  "image_url": "https://example.com/screenshot.png",
+  "char_name": "Elesis"
+}
+```
+
+**Body (opção 2 - Base64):**
+```json
+{
+  "image_base64": "iVBORw0KGgoAAAANS...",
+  "char_name": "Elesis"
+}
+```
+
+**Resposta:**
+```json
+{
+  "success": true,
+  "extracted": {
+    "atk": 45000,
+    "atk_sp": 15000,
+    "nivel": 90,
+    "status_despertar": "Despertado",
+    "andar_wl": 28,
+    "status_anel": "Obtido",
+    "tipo_anel": "Caos",
+    "confidence": 0.95
+  },
+  "note": "Use these values with POST /api/stats to register"
+}
+```
+
+**Campos extraíveis:**
+- `atk`, `atk_sp`, `nivel`, `status_despertar` (sempre tentados)
+- `andar_wl`, acessórios (status/tipo de anel, tornozeleira, brinco, piercing) (se visíveis na imagem)
+- `confidence` (0-1): confiança do modelo na extração
+
+**Uso recomendado:**
+1. Usuário tira screenshot da tela de atributos
+2. Frontend envia para `/api/ocr/extract-stats`
+3. Frontend exibe valores extraídos para confirmação
+4. Usuário confirma e frontend chama `/api/stats` para persistir
+
+**Configuração:**
+Requer `OPENAI_API_KEY` no `.env`. Se não configurado, endpoint retorna 503.
+
+**Custos:**
+~$0.003-0.01 por imagem (GPT-4o vision, depende de resolução). Ver [OpenAI Pricing](https://openai.com/pricing).
+
 ## MCP Server Tools
 
 ### Discord & Permissions
