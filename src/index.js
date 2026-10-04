@@ -450,6 +450,33 @@ app.post('/api/stats/update-all-chars', authMiddleware, validate(updateAllCharsS
   }
 });
 
+// Maintenance endpoints (automated reset)
+const { resetWeeklyMissions, resetDailyMissions } = require('./maintenance');
+
+app.post('/api/maintenance/reset-weekly', authMiddleware, async (req, res, next) => {
+  try {
+    const { date } = req.body || {};
+    logger.info({ date }, 'Weekly reset triggered');
+    
+    const result = await resetWeeklyMissions(date);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/maintenance/reset-daily', authMiddleware, async (req, res, next) => {
+  try {
+    const { date } = req.body || {};
+    logger.info({ date }, 'Daily reset triggered');
+    
+    const result = await resetDailyMissions(date);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use(errorHandler);
 
 app.listen(PORT, () => {

@@ -253,6 +253,76 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 }
 ```
 
+## Maintenance Endpoints
+
+### `POST /api/maintenance/reset-weekly`
+**Reset semanal automático** (quartas-feiras 03:00 BRT)
+
+Cria novos registros com status `A fazer` para todas as missões semanais. **Preserva histórico** (não deleta dados antigos).
+
+**Headers:**
+```
+X-API-Key: sua-chave-secreta
+```
+
+**Body (opcional):**
+```json
+{
+  "date": "2026-10-09"
+}
+```
+
+**Resposta:**
+```json
+{
+  "success": true,
+  "totalUpdated": 175,
+  "resetDate": "2026-10-09"
+}
+```
+
+**Campos resetados:**
+- `status_void_unificado_semanal`
+- `status_void_4_semanal`
+- `status_wl_semanal`
+- `status_fornalha_infernal_semanal`
+- `status_altar_ruina_semanal`
+- `status_abissal_semanal`
+- `status_solene_semanal`
+
+### `POST /api/maintenance/reset-daily`
+**Reset diário automático** (todos os dias 03:00 BRT)
+
+Cria novos registros com status `A fazer` para todas as missões diárias. **Preserva histórico** (não deleta dados antigos).
+
+**Headers:**
+```
+X-API-Key: sua-chave-secreta
+```
+
+**Body (opcional):**
+```json
+{
+  "date": "2026-10-05"
+}
+```
+
+**Resposta:**
+```json
+{
+  "success": true,
+  "totalUpdated": 75,
+  "resetDate": "2026-10-05"
+}
+```
+
+**Campos resetados:**
+- `status_tod_diario`
+- `status_claustro_infinito_diario`
+- `status_berkas_diario`
+
+**Configuração de Cron:** Ver seção "Automated Resets" abaixo.
+
 ## MCP Server Tools
 
 ### Discord & Permissions
@@ -437,6 +507,62 @@ Ver `ARCHITECTURE.md` para diagramas Mermaid completos do modelo Kimball, fluxos
 | Supabase | Free | $0 (500MB DB, 2GB transfer) |
 | Render | Free | $0 (750h/mês) |
 | **Total** | | **$0/mês** |
+
+## Automated Resets
+
+O sistema preserva histórico completo. Resets criam novos registros sem deletar dados antigos.
+
+### Configuração via EasyCron (Recomendado)
+
+**1. Reset Semanal (Quartas 03:00 BRT):**
+```
+URL: https://gc-classic-api.onrender.com/api/maintenance/reset-weekly
+Method: POST
+Schedule: 0 3 * * 3 (every Wednesday at 03:00)
+Timezone: America/Sao_Paulo
+Headers: X-API-Key: YOUR_API_KEY
+```
+
+**2. Reset Diário (Todos os dias 03:00 BRT):**
+```
+URL: https://gc-classic-api.onrender.com/api/maintenance/reset-daily
+Method: POST
+Schedule: 0 3 * * * (every day at 03:00)
+Timezone: America/Sao_Paulo
+Headers: X-API-Key: YOUR_API_KEY
+```
+
+**Alternativas:**
+- **Render Cron Jobs** (plano pago)
+- **GitHub Actions** (workflow agendado)
+- **Supabase Edge Functions** (pg_cron)
+
+### Comportamento do Reset
+
+**Antes do reset:**
+```sql
+-- 2026-10-02 (terça)
+user_id=1, char_id=1, date=2026-10-02, status_berkas_diario='Feito'
+```
+
+**Após reset (quarta 03:00):**
+```sql
+-- Registro antigo preservado
+user_id=1, char_id=1, date=2026-10-02, status_berkas_diario='Feito'
+
+-- Novo registro criado
+user_id=1, char_id=1, date=2026-10-09, status_berkas_diario='A fazer'
+```
+
+**Queries de ranking funcionam normalmente:**
+```sql
+SELECT username, COUNT(*) as berkas_count
+FROM fact_character_stats
+WHERE status_berkas_diario = 'Feito'
+  AND date >= '2026-09-01'
+GROUP BY username
+ORDER BY berkas_count DESC;
+```
 
 ## Licença
 
