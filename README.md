@@ -181,6 +181,9 @@ Registrar stats de personagem (**requer discord_id para autorização**)
 - Weekly: `status_void_unificado_semanal`, `cristais_void_unificado`, `status_void_4_semanal`, `cristais_void_4`, `status_wl_semanal`, `andar_wl`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
 - Daily: `status_tod_diario`, `status_claustro_infinito_diario`, `nivel_claustro_infinito`, `status_berkas_diario`
 - Drops: `drop_perg_prop_uni` (int), `drop_grim_reaper_card` (int), `status_brinco_caos`, `status_piercing_caos`, `idas_calnat`
+- Accessories: `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
+- Notes: `anotacoes` (TEXT, max 5000 chars)
+- Calculated: `poder` (auto-computed from atk + atk_sp)
 
 ### `POST /api/stats/batch`
 Registrar múltiplos stats (max 100 records)
@@ -240,6 +243,7 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 - Weekly: `status_void_unificado_semanal`, `status_void_4_semanal`, `status_wl_semanal`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
 - Daily: `status_tod_diario`, `status_claustro_infinito_diario`, `status_berkas_diario`
 - Items: `status_brinco_caos`, `status_piercing_caos`
+- Accessories: `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
 
 **Resposta:**
 ```json

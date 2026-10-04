@@ -98,6 +98,27 @@ Complete field reference for AI agents consuming the MCP server.
 | `status_brinco_caos` | TEXT | `Obtido` | Status of obtaining Chaos Earring with the character |
 | `status_piercing_caos` | TEXT | `Não obtido` | Status of obtaining Chaos Piercing with the character |
 
+## Accessories
+
+| Field | Type | Example | Description |
+|-------|------|---------|-------------|
+| `status_anel` | TEXT | `Obtido` | Status of obtaining ring accessory |
+| `tipo_anel` | TEXT | `Caos` | Type of ring (Esmaecido, Silencioso, Sangrento, Caos) |
+| `status_tornozeleira` | TEXT | `Obtido` | Status of obtaining ankle bracelet accessory |
+| `tipo_tornozeleira` | TEXT | `Eternidade` | Type of ankle bracelet (Eternidade, Redenção, Perfeição, Caos) |
+
+## Calculated Fields
+
+| Field | Type | Example | Description |
+|-------|------|---------|-------------|
+| `poder` | NUMERIC | `6.00` | Auto-calculated power: (atk + atk_sp) / 10000 |
+
+## Notes
+
+| Field | Type | Example | Description |
+|-------|------|---------|-------------|
+| `anotacoes` | TEXT | `Personagem principal para PvP` | Free-text notes and observations for the character |
+
 ## Meta Fields
 
 | Field | Type | Example | Description |
@@ -142,6 +163,10 @@ Use `update_stat_all_chars` to update ONE field across all 25 characters of an a
 - `status_piercing_caos`
 - `status_solene_semanal`
 - `status_berkas_diario`
+- `status_anel`
+- `tipo_anel`
+- `status_tornozeleira`
+- `tipo_tornozeleira`
 
 **Use case examples:**
 - Player completed Berkas on all characters → mark `status_berkas_diario` as `Feito` for all

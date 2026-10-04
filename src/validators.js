@@ -40,7 +40,16 @@ const registerStatsSchema = z.object({
   status_brinco_caos: z.string().max(100).optional(),
   status_piercing_caos: z.string().max(100).optional(),
   status_solene_semanal: z.string().max(100).optional(),
-  status_berkas_diario: z.string().max(100).optional()
+  status_berkas_diario: z.string().max(100).optional(),
+  
+  // Accessories
+  status_anel: z.string().max(100).optional(),
+  tipo_anel: z.string().max(100).optional(),
+  status_tornozeleira: z.string().max(100).optional(),
+  tipo_tornozeleira: z.string().max(100).optional(),
+  
+  // Notes
+  anotacoes: z.string().max(5000).optional()
 });
 
 const batchStatsSchema = z.object({
@@ -72,7 +81,11 @@ const updateAllCharsSchema = z.object({
     'status_brinco_caos',
     'status_piercing_caos',
     'status_solene_semanal',
-    'status_berkas_diario'
+    'status_berkas_diario',
+    'status_anel',
+    'tipo_anel',
+    'status_tornozeleira',
+    'tipo_tornozeleira'
   ]),
   field_value: z.string().max(100).trim(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

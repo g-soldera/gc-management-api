@@ -73,11 +73,17 @@ describe('Input Validation', () => {
         atk: 12000,
         atk_sp: 3000,
         andar_wl: 25,
-        drop_perg_prop_uni: true
+        drop_perg_prop_uni: 3,
+        status_anel: 'Obtido',
+        tipo_anel: 'Caos',
+        anotacoes: 'Main character'
       });
       expect(result.atk_total).toBe(15000);
       expect(result.andar_wl).toBe(25);
-      expect(result.drop_perg_prop_uni).toBe(true);
+      expect(result.drop_perg_prop_uni).toBe(3);
+      expect(result.status_anel).toBe('Obtido');
+      expect(result.tipo_anel).toBe('Caos');
+      expect(result.anotacoes).toBe('Main character');
     });
 
     it('should reject invalid date format', () => {
