@@ -1,0 +1,13 @@
+node_modules/
+.env
+.DS_Store
+*.log
+dist/
+.supabase/
+supabase/.temp/
+*.swp
+*.swo
+.vscode/
+.idea/
+coverage/
+.nyc_output/
