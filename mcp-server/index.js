@@ -27,16 +27,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'create_user',
-        description: 'Create a new user account (supports Korean characters)',
+        description: 'Create a new game account linked to a Discord user',
         inputSchema: {
           type: 'object',
           properties: {
             username: {
               type: 'string',
-              description: 'Username (can contain Korean characters)',
+              description: 'Game account username (can contain Korean characters)',
+            },
+            discord_owner_id: {
+              type: 'string',
+              description: 'Discord user ID (snowflake) who owns this account',
             },
           },
-          required: ['username'],
+          required: ['username', 'discord_owner_id'],
         },
       },
       {
@@ -88,8 +92,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             status_piercing_caos: { type: 'string', description: 'Chaos Piercing obtained status' },
             status_solene_semanal: { type: 'string', description: 'Weekly Solene status: minimum 5 runs in any Solene map (Other World)' },
             status_berkas_diario: { type: 'string', description: 'Daily Berkas completion status for this character' },
+            discord_id: { type: 'string', description: 'Discord user ID (required for permission check)' },
           },
-          required: ['username', 'char_name'],
+          required: ['username', 'char_name', 'discord_id'],
         },
       },
       {
@@ -158,8 +163,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             field_value: { type: 'string', description: 'Value to set for this field (e.g., "Feito", "Despertado", "90")' },
             date: { type: 'string', description: 'Date (YYYY-MM-DD), defaults to today' },
+            discord_id: { type: 'string', description: 'Discord user ID (required for permission check)' },
           },
-          required: ['username', 'field_name', 'field_value'],
+          required: ['username', 'field_name', 'field_value', 'discord_id'],
+        },
+      },
+      {
+        name: 'create_discord_user',
+        description: 'Register a Discord user in the system (required before creating game accounts)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            discord_id: { type: 'string', description: 'Discord user ID (snowflake)' },
+            discord_username: { type: 'string', description: 'Discord username' },
+            discord_discriminator: { type: 'string', description: 'Discord discriminator (optional, legacy)' },
+            discord_avatar: { type: 'string', description: 'Discord avatar hash (optional)' },
+          },
+          required: ['discord_id', 'discord_username'],
+        },
+      },
+      {
+        name: 'grant_permission',
+        description: 'Owner grants permission to another Discord user to edit their game account',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            owner_discord_id: { type: 'string', description: 'Discord ID of the account owner' },
+            username: { type: 'string', description: 'Game account username' },
+            grant_to_discord_id: { type: 'string', description: 'Discord ID to grant permission to' },
+          },
+          required: ['owner_discord_id', 'username', 'grant_to_discord_id'],
+        },
+      },
+      {
+        name: 'revoke_permission',
+        description: 'Owner revokes permission from a Discord user',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            owner_discord_id: { type: 'string', description: 'Discord ID of the account owner' },
+            username: { type: 'string', description: 'Game account username' },
+            revoke_from_discord_id: { type: 'string', description: 'Discord ID to revoke permission from' },
+          },
+          required: ['owner_discord_id', 'username', 'revoke_from_discord_id'],
+        },
+      },
+      {
+        name: 'list_permissions',
+        description: 'List all permissions for a game account',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            username: { type: 'string', description: 'Game account username' },
+          },
+          required: ['username'],
         },
       },
     ],
@@ -270,6 +327,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Updated ${updateData.updated_count} characters for user ${args.username}: ${updateData.char_names.join(', ')}`,
+            },
+          ],
+        };
+
+      case 'create_discord_user':
+        const discordUserData = await makeRequest('/api/discord/users', 'POST', args);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Discord user registered: ${discordUserData.discord_username} (ID: ${discordUserData.discord_id})`,
+            },
+          ],
+        };
+
+      case 'grant_permission':
+        const grantData = await makeRequest('/api/permissions/grant', 'POST', args);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Permission granted: ${grantData.message}`,
+            },
+          ],
+        };
+
+      case 'revoke_permission':
+        const revokeData = await makeRequest('/api/permissions/revoke', 'POST', args);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Permission revoked: ${revokeData.message}`,
+            },
+          ],
+        };
+
+      case 'list_permissions':
+        const permData = await makeRequest(`/api/permissions/${args.username}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(permData, null, 2),
             },
           ],
         };

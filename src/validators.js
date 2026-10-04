@@ -1,16 +1,20 @@
 const { z } = require('zod');
 
+const discordIdSchema = z.string().regex(/^\d{17,20}$/, 'Invalid Discord ID (snowflake)');
+
 const createUserSchema = z.object({
   username: z.string()
     .min(1, 'Username required')
     .max(50, 'Username too long (max 50 chars)')
-    .trim()
+    .trim(),
+  discord_owner_id: discordIdSchema.optional()
 });
 
 const registerStatsSchema = z.object({
   username: z.string().min(1).max(50).trim(),
   char_name: z.string().min(1).max(50).trim(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  discord_id: discordIdSchema.optional(),
   
   nivel: z.number().int().min(0).max(999).optional(),
   status_despertar: z.string().max(100).optional(),
@@ -71,7 +75,27 @@ const updateAllCharsSchema = z.object({
     'status_berkas_diario'
   ]),
   field_value: z.string().max(100).trim(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  discord_id: discordIdSchema.optional()
+});
+
+const createDiscordUserSchema = z.object({
+  discord_id: discordIdSchema,
+  discord_username: z.string().min(1).max(100).trim(),
+  discord_discriminator: z.string().max(10).optional(),
+  discord_avatar: z.string().max(200).optional()
+});
+
+const grantPermissionSchema = z.object({
+  owner_discord_id: discordIdSchema,
+  username: z.string().min(1).max(50).trim(),
+  grant_to_discord_id: discordIdSchema
+});
+
+const revokePermissionSchema = z.object({
+  owner_discord_id: discordIdSchema,
+  username: z.string().min(1).max(50).trim(),
+  revoke_from_discord_id: discordIdSchema
 });
 
 const validate = (schema) => (req, res, next) => {
@@ -96,5 +120,8 @@ module.exports = {
   batchStatsSchema,
   queryStatsSchema,
   updateAllCharsSchema,
+  createDiscordUserSchema,
+  grantPermissionSchema,
+  revokePermissionSchema,
   validate
 };

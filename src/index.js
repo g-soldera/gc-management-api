@@ -5,7 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const logger = require('./logger');
-const { validate, createUserSchema, registerStatsSchema, batchStatsSchema, queryStatsSchema, updateAllCharsSchema } = require('./validators');
+const { validate, createUserSchema, registerStatsSchema, batchStatsSchema, queryStatsSchema, updateAllCharsSchema, createDiscordUserSchema, grantPermissionSchema, revokePermissionSchema } = require('./validators');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +54,34 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
+const checkDiscordPermission = async (req, res, next) => {
+  const { username, discord_id } = req.validated;
+  
+  if (!discord_id) {
+    logger.warn({ username }, 'Discord ID not provided for permission check');
+    return res.status(403).json({ error: 'Discord ID required for this operation' });
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('can_modify_account', {
+      p_discord_id: discord_id,
+      p_username: username
+    });
+
+    if (error) throw error;
+
+    if (!data) {
+      logger.warn({ discord_id, username }, 'Permission denied');
+      return res.status(403).json({ error: 'Permission denied: you do not have access to this account' });
+    }
+
+    next();
+  } catch (error) {
+    logger.error({ error: error.message, discord_id, username }, 'Permission check failed');
+    next(error);
+  }
+};
+
 const errorHandler = (err, req, res, next) => {
   logger.error({ err, path: req.path }, 'Unhandled error');
   if (err.code === '23505') {
@@ -72,12 +100,12 @@ app.get('/health', (req, res) => {
 
 app.post('/api/users', authMiddleware, authLimiter, validate(createUserSchema), async (req, res, next) => {
   try {
-    const { username } = req.validated;
+    const { username, discord_owner_id } = req.validated;
     
-    logger.info({ username }, 'Creating user');
+    logger.info({ username, discord_owner_id }, 'Creating user');
     const { data, error } = await supabase
       .from('dim_users')
-      .insert({ username })
+      .insert({ username, discord_owner_id })
       .select()
       .single();
 
@@ -123,9 +151,115 @@ app.get('/api/characters', authMiddleware, async (req, res, next) => {
   }
 });
 
-app.post('/api/stats', authMiddleware, validate(registerStatsSchema), async (req, res, next) => {
+app.post('/api/discord/users', authMiddleware, validate(createDiscordUserSchema), async (req, res, next) => {
   try {
-    const { username, char_name, date, ...stats } = req.validated;
+    const { discord_id, discord_username, discord_discriminator, discord_avatar } = req.validated;
+    
+    logger.info({ discord_id, discord_username }, 'Creating Discord user');
+    const { data, error } = await supabase
+      .from('discord_users')
+      .upsert({ discord_id, discord_username, discord_discriminator, discord_avatar }, { onConflict: 'discord_id' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    logger.info({ discord_id }, 'Discord user created/updated');
+    res.status(201).json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/permissions/grant', authMiddleware, validate(grantPermissionSchema), async (req, res, next) => {
+  try {
+    const { owner_discord_id, username, grant_to_discord_id } = req.validated;
+    
+    logger.info({ owner_discord_id, username, grant_to_discord_id }, 'Granting permission');
+    const { data, error } = await supabase.rpc('grant_permission', {
+      p_owner_discord_id: owner_discord_id,
+      p_username: username,
+      p_grant_to_discord_id: grant_to_discord_id
+    });
+
+    if (error) throw error;
+    
+    const result = data[0];
+    if (!result.granted) {
+      return res.status(403).json({ error: result.message });
+    }
+    
+    logger.info({ permission_id: result.permission_id }, 'Permission granted');
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/permissions/revoke', authMiddleware, validate(revokePermissionSchema), async (req, res, next) => {
+  try {
+    const { owner_discord_id, username, revoke_from_discord_id } = req.validated;
+    
+    logger.info({ owner_discord_id, username, revoke_from_discord_id }, 'Revoking permission');
+    const { data, error } = await supabase.rpc('revoke_permission', {
+      p_owner_discord_id: owner_discord_id,
+      p_username: username,
+      p_revoke_from_discord_id: revoke_from_discord_id
+    });
+
+    if (error) throw error;
+    
+    const result = data[0];
+    if (!result.revoked) {
+      return res.status(404).json({ error: result.message });
+    }
+    
+    logger.info({ username, revoke_from_discord_id }, 'Permission revoked');
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/permissions/:username', authMiddleware, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    
+    logger.info({ username }, 'Fetching permissions');
+    
+    const { data: user } = await supabase
+      .from('dim_users')
+      .select('user_id, discord_owner_id')
+      .eq('username', username)
+      .single();
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { data: permissions, error } = await supabase
+      .from('user_permissions')
+      .select(`
+        *,
+        granted_to:discord_users!granted_to_discord_id(discord_id, discord_username),
+        granted_by:discord_users!granted_by_discord_id(discord_id, discord_username)
+      `)
+      .eq('game_account_id', user.user_id);
+
+    if (error) throw error;
+    
+    res.json({
+      username,
+      owner_discord_id: user.discord_owner_id,
+      permissions
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/stats', authMiddleware, validate(registerStatsSchema), checkDiscordPermission, async (req, res, next) => {
+  try {
+    const { username, char_name, date, discord_id, ...stats } = req.validated;
 
     logger.info({ username, char_name }, 'Registering stats');
     const { data: user, error: userError } = await supabase
@@ -289,11 +423,11 @@ app.get('/api/stats', authMiddleware, validate(queryStatsSchema), async (req, re
   }
 });
 
-app.post('/api/stats/update-all-chars', authMiddleware, validate(updateAllCharsSchema), async (req, res, next) => {
+app.post('/api/stats/update-all-chars', authMiddleware, validate(updateAllCharsSchema), checkDiscordPermission, async (req, res, next) => {
   try {
-    const { username, field_name, field_value, date } = req.validated;
+    const { username, field_name, field_value, date, discord_id } = req.validated;
 
-    logger.info({ username, field_name, field_value }, 'Updating stat for all characters');
+    logger.info({ username, field_name, field_value, discord_id }, 'Updating stat for all characters');
     
     const targetDate = date || new Date().toISOString().split('T')[0];
     
