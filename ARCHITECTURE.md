@@ -6,127 +6,103 @@ Sistema de rastreamento de personagens e atividades do GrandChase Classic, const
 
 ## Stack Tecnológico
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Cliente                              │
-│  (Agentes via MCP Server / HTTP Clients / Postman)          │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              │ HTTP/HTTPS + X-API-Key
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      API REST Layer                          │
-│                    (Express.js + Node.js)                    │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Middlewares: Helmet, CORS, Auth, JSON Parser       │   │
-│  └──────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Routes: /users, /characters, /stats, /stats/batch  │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              │ Supabase Client SDK
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Supabase (PostgreSQL)                     │
-│                     Kimball Data Model                       │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                       MCP Server                             │
-│             (Model Context Protocol Interface)               │
-│  Tools: create_user, register_stats, register_stats_batch   │
-│         query_stats, list_users, list_characters            │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    Client[Cliente<br/>Agentes via MCP / HTTP Clients / Postman]
+    
+    subgraph API["API REST Layer (Express.js + Node.js)"]
+        Middleware[Middlewares<br/>Helmet, CORS, Auth, JSON Parser]
+        Routes[Routes<br/>/users, /characters, /stats, /stats/batch]
+    end
+    
+    DB[(Supabase PostgreSQL<br/>Kimball Data Model)]
+    
+    subgraph MCP[MCP Server]
+        Tools[Tools: create_user, register_stats<br/>register_stats_batch, query_stats<br/>list_users, list_characters]
+    end
+    
+    Client -->|HTTP/HTTPS + X-API-Key| Middleware
+    Middleware --> Routes
+    Routes -->|Supabase SDK| DB
+    MCP -->|HTTP + X-API-Key| API
 ```
 
 ## Modelo de Dados - Kimball Dimensional Model
 
-### Diagrama Entidade-Relacionamento
+### Diagrama Entidade-Relacionamento (Star Schema)
 
+```mermaid
+erDiagram
+    dim_users ||--o{ fact_character_stats : "user_id"
+    dim_characters ||--o{ fact_character_stats : "char_id"
+    dim_time ||--o{ fact_character_stats : "time_id"
+
+    dim_users {
+        bigserial user_id PK
+        text username UK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    dim_characters {
+        smallserial char_id PK
+        text char_name_ptbr
+        text char_name_enus
+        timestamptz created_at
+    }
+
+    dim_time {
+        bigserial time_id PK
+        date date UK
+        smallint year
+        smallint month
+        smallint week
+        smallint day
+        smallint day_of_week
+    }
+
+    fact_character_stats {
+        bigserial fact_id PK
+        bigint user_id FK
+        smallint char_id FK
+        bigint time_id FK
+        integer atk_total
+        integer atk
+        integer atk_sp
+        text status_void_unificado_semanal
+        integer cristais_void_unificado
+        text status_void_4_semanal
+        integer cristais_void_4
+        text status_wl_semanal
+        smallint andar_wl
+        text status_fornalha_infernal_semanal
+        text status_altar_ruina_semanal
+        text status_tod_diario
+        boolean drop_perg_prop_uni
+        text status_abissal_semanal
+        boolean drop_grim_reaper_card
+        text status_claustro_infinito_diario
+        smallint nivel_claustro_infinito
+        integer idas_calnat
+        text status_brinco_caos
+        text status_piercing_caos
+        text status_solene_semanal
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
-┌─────────────────────────┐
-│      dim_users          │
-│─────────────────────────│
-│ PK  user_id (BIGSERIAL) │
-│ UK  username (TEXT)     │ ◄────┐
-│     created_at          │      │
-│     updated_at          │      │
-└─────────────────────────┘      │
-                                 │
-                                 │ FK
-┌─────────────────────────┐      │
-│    dim_characters       │      │
-│─────────────────────────│      │
-│ PK  char_id (SMALLINT)  │ ◄──┐ │
-│     char_name_ptbr      │    │ │
-│     char_name_enus      │    │ │
-│     created_at          │    │ │
-└─────────────────────────┘    │ │
-                               │ │ FK
-                               │ │
-┌─────────────────────────┐    │ │
-│       dim_time          │    │ │
-│─────────────────────────│    │ │
-│ PK  time_id (BIGSERIAL) │ ◄─┐│ │
-│ UK  date (DATE)         │   ││ │
-│     year (SMALLINT)     │   ││ │
-│     month (SMALLINT)    │   ││ │
-│     week (SMALLINT)     │   ││ │
-│     day (SMALLINT)      │   ││ │
-│     day_of_week         │   ││ │
-└─────────────────────────┘   ││ │
-                              ││ │
-                              ││ │
-        ┌─────────────────────┘│ │
-        │  ┌───────────────────┘ │
-        │  │  ┌──────────────────┘
-        │  │  │
-        ▼  ▼  ▼
-┌────────────────────────────────────────────────────────┐
-│            fact_character_stats (FACT TABLE)           │
-│────────────────────────────────────────────────────────│
-│ PK  fact_id (BIGSERIAL)                                │
-│ FK  user_id (BIGINT) → dim_users.user_id               │
-│ FK  char_id (SMALLINT) → dim_characters.char_id        │
-│ FK  time_id (BIGINT) → dim_time.time_id                │
-│ UK  (user_id, char_id, time_id)                        │
-│────────────────────────────────────────────────────────│
-│ MEASURES - Combat Stats:                               │
-│     atk_total (INTEGER)                                │
-│     atk (INTEGER)                                      │
-│     atk_sp (INTEGER)                                   │
-│────────────────────────────────────────────────────────│
-│ MEASURES - Weekly Activities:                          │
-│     status_void_unificado_semanal (TEXT)               │
-│     cristais_void_unificado (INTEGER)                  │
-│     status_void_4_semanal (TEXT)                       │
-│     cristais_void_4 (INTEGER)                          │
-│     status_wl_semanal (TEXT)                           │
-│     andar_wl (SMALLINT)                                │
-│     status_fornalha_infernal_semanal (TEXT)            │
-│     status_altar_ruina_semanal (TEXT)                  │
-│     status_abissal_semanal (TEXT)                      │
-│     status_solene_semanal (TEXT)                       │
-│────────────────────────────────────────────────────────│
-│ MEASURES - Daily Activities:                           │
-│     status_tod_diario (TEXT)                           │
-│     status_claustro_infinito_diario (TEXT)             │
-│     nivel_claustro_infinito (SMALLINT)                 │
-│────────────────────────────────────────────────────────│
-│ MEASURES - Drops & Items:                              │
-│     drop_perg_prop_uni (BOOLEAN)                       │
-│     drop_grim_reaper_card (BOOLEAN)                    │
-│     status_brinco_caos (TEXT)                          │
-│     status_piercing_caos (TEXT)                        │
-│────────────────────────────────────────────────────────│
-│ MEASURES - Other:                                      │
-│     idas_calnat (INTEGER)                              │
-│────────────────────────────────────────────────────────│
-│     created_at (TIMESTAMPTZ)                           │
-│     updated_at (TIMESTAMPTZ)                           │
-└────────────────────────────────────────────────────────┘
-```
+
+### Medidas por Categoria
+
+**Combat Stats:** `atk_total`, `atk`, `atk_sp`
+
+**Weekly Activities:** `status_void_unificado_semanal`, `cristais_void_unificado`, `status_void_4_semanal`, `cristais_void_4`, `status_wl_semanal`, `andar_wl`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
+
+**Daily Activities:** `status_tod_diario`, `status_claustro_infinito_diario`, `nivel_claustro_infinito`
+
+**Drops & Items:** `drop_perg_prop_uni`, `drop_grim_reaper_card`, `status_brinco_caos`, `status_piercing_caos`
+
+**Other:** `idas_calnat`
 
 ### Índices de Performance
 
@@ -148,68 +124,72 @@ idx_fact_char_stats_created ON created_at DESC
 
 ### 1. Cadastro de Usuário
 
-```
-Cliente → POST /api/users {username: "Player한국"}
-   ↓
-Express Middleware (Auth Check)
-   ↓
-Supabase INSERT INTO dim_users
-   ↓
-Response: {user_id: 123, username: "Player한국", created_at: "..."}
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Express API
+    participant DB as Supabase
+
+    Client->>API: POST /api/users {username: "Player한국"}
+    API->>API: Auth Middleware (X-API-Key)
+    API->>DB: INSERT INTO dim_users
+    DB-->>API: {user_id: 123, username, created_at}
+    API-->>Client: 201 Created
 ```
 
 ### 2. Registro de Stats (Individual)
 
-```
-Cliente → POST /api/stats {username, char_name, date, atk_total, ...}
-   ↓
-Express Middleware (Auth + Validation)
-   ↓
-Resolve user_id FROM dim_users WHERE username = ?
-   ↓
-Resolve char_id FROM dim_characters WHERE char_name = ?
-   ↓
-Ensure time_id via ensure_time_dimension(date)
-   ↓
-Supabase UPSERT INTO fact_character_stats
-   ↓
-Response: {fact_id, user_id, char_id, time_id, ...}
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Express API
+    participant DB as Supabase
+
+    Client->>API: POST /api/stats {username, char_name, date, atk_total, ...}
+    API->>API: Auth + Validation
+    API->>DB: SELECT user_id FROM dim_users WHERE username = ?
+    DB-->>API: user_id
+    API->>DB: SELECT char_id FROM dim_characters WHERE char_name = ?
+    DB-->>API: char_id
+    API->>DB: CALL ensure_time_dimension(date)
+    DB-->>API: time_id
+    API->>DB: UPSERT INTO fact_character_stats
+    DB-->>API: {fact_id, user_id, char_id, time_id, ...}
+    API-->>Client: 201 Created
 ```
 
 ### 3. Registro de Stats (Batch)
 
-```
-Cliente → POST /api/stats/batch {records: [{username, char_name, ...}, ...]}
-   ↓
-Express Middleware (Auth)
-   ↓
-FOR EACH record:
-   ├─ Resolve user_id
-   ├─ Resolve char_id
-   ├─ Ensure time_id
-   └─ UPSERT fact_character_stats
-   ↓
-Response: {success: N, results: [...], errors: [...]}
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Express API
+    participant DB as Supabase
+
+    Client->>API: POST /api/stats/batch {records: [...]}
+    API->>API: Auth Middleware
+    loop For each record
+        API->>DB: Resolve user_id
+        API->>DB: Resolve char_id
+        API->>DB: Ensure time_id
+        API->>DB: UPSERT fact_character_stats
+    end
+    API-->>Client: {success: N, results: [...], errors: [...]}
 ```
 
 ### 4. Consulta de Stats
 
-```
-Cliente → GET /api/stats?username=X&char_name=Y&from_date=Z
-   ↓
-Express Middleware (Auth)
-   ↓
-Build query with JOINs:
-   fact_character_stats
-   LEFT JOIN dim_users
-   LEFT JOIN dim_characters
-   LEFT JOIN dim_time
-   ↓
-WHERE filters applied
-   ↓
-ORDER BY created_at DESC LIMIT 100
-   ↓
-Response: [{fact_id, username, char_name, date, atk_total, ...}, ...]
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Express API
+    participant DB as Supabase
+
+    Client->>API: GET /api/stats?username=X&char_name=Y
+    API->>API: Auth Middleware
+    API->>DB: SELECT * FROM fact_character_stats<br/>JOIN dim_users, dim_characters, dim_time<br/>WHERE filters ORDER BY created_at DESC LIMIT 100
+    DB-->>API: [{fact_id, username, char_name, date, ...}, ...]
+    API-->>Client: 200 OK + JSON
 ```
 
 ## Segurança
@@ -325,23 +305,19 @@ query_stats(username?, char_name?, from_date?, to_date?)
 
 ## Deploy Architecture
 
-```
-GitHub Repo
-    ↓
-    ↓ (git push)
-    ↓
-Render Web Service
-    ├─ Auto-deploy on push
-    ├─ Build: npm install
-    ├─ Start: npm start
-    └─ Env vars: SUPABASE_URL, SUPABASE_SERVICE_KEY, API_KEY
-    ↓
-    ↓ (connects to)
-    ↓
-Supabase Project (PostgreSQL)
-    ├─ Migrations applied via supabase db push
-    ├─ RLS enabled
-    └─ Free tier: 500MB DB, 2GB bandwidth
+```mermaid
+graph LR
+    GitHub[GitHub Repo<br/>gc-management-api]
+    
+    Render[Render Web Service<br/>Auto-deploy on push<br/>Build: npm install<br/>Start: npm start]
+    
+    Supabase[(Supabase PostgreSQL<br/>Migrations applied<br/>RLS enabled<br/>Free tier)]
+    
+    Env[Environment Variables<br/>SUPABASE_URL<br/>SUPABASE_SERVICE_KEY<br/>API_KEY]
+    
+    GitHub -->|git push| Render
+    Env -.->|config| Render
+    Render -->|Supabase SDK| Supabase
 ```
 
 ## Custos Estimados
