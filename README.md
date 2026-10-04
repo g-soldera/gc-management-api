@@ -12,6 +12,7 @@ API REST para rastreamento de personagens e atividades do GrandChase Classic com
 ✅ **Suporte a caracteres coreanos** em usernames  
 ✅ **API REST** com autenticação via API Key  
 ✅ **MCP Server** para integração com agentes  
+✅ **Batch updates** (1 stat para todos os 25 personagens da conta)  
 ✅ **Rate limiting** (100 req/15min global, 5 req/15min auth)  
 ✅ **Input validation** (Zod schemas)  
 ✅ **Paginação** (cursor-based com offset/limit)  
@@ -81,11 +82,22 @@ Registrar stats de personagem (atualização parcial suportada)
   "username": "PlayerKR",
   "char_name": "Elesis",
   "date": "2026-10-04",
-  "atk_total": 15000,
-  "andar_wl": 25,
-  "drop_perg_prop_uni": true
+  "nivel": 90,
+  "status_despertar": "Despertado",
+  "atk_total": 1000000,
+  "atk": 40000,
+  "atk_sp": 20000,
+  "status_void_unificado_semanal": "Feito",
+  "cristais_void_unificado": 10,
+  "status_berkas_diario": "Feito"
 }
 ```
+
+**Campos suportados:**
+- Combat: `nivel`, `status_despertar`, `atk_total`, `atk`, `atk_sp`
+- Weekly: `status_void_unificado_semanal`, `cristais_void_unificado`, `status_void_4_semanal`, `cristais_void_4`, `status_wl_semanal`, `andar_wl`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
+- Daily: `status_tod_diario`, `status_claustro_infinito_diario`, `nivel_claustro_infinito`, `status_berkas_diario`
+- Drops: `drop_perg_prop_uni` (int), `drop_grim_reaper_card` (int), `status_brinco_caos`, `status_piercing_caos`, `idas_calnat`
 
 ### `POST /api/stats/batch`
 Registrar múltiplos stats (max 100 records)
@@ -124,6 +136,33 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 - `limit` (opcional, padrão 50, max 100)
 - `offset` (opcional, padrão 0)
 
+### `POST /api/stats/update-all-chars`
+**Atualizar 1 campo em todos os 25 personagens da conta**
+```json
+{
+  "username": "PlayerKR",
+  "field_name": "status_berkas_diario",
+  "field_value": "Feito",
+  "date": "2026-10-04"
+}
+```
+
+**Exemplo de uso:** Marcar Berkas como "Feito" para todos os personagens em uma única chamada.
+
+**Campo `field_name` permitidos:**
+- Combat: `nivel`, `status_despertar`
+- Weekly: `status_void_unificado_semanal`, `status_void_4_semanal`, `status_wl_semanal`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
+- Daily: `status_tod_diario`, `status_claustro_infinito_diario`, `status_berkas_diario`
+- Items: `status_brinco_caos`, `status_piercing_caos`
+
+**Resposta:**
+```json
+{
+  "updated_count": 25,
+  "char_names": ["Elesis", "Arme", "Lire", ..., "Ereb"]
+}
+```
+
 ## MCP Server Tools
 
 - `create_user(username)` - Criar usuário
@@ -132,6 +171,26 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 - `register_stats(username, char_name, date, ...stats)` - Registrar stats individual
 - `register_stats_batch(records: [...])` - Registrar stats em lote
 - `query_stats(username?, char_name?, from_date?, to_date?)` - Consultar stats
+- `update_stat_all_chars(username, field_name, field_value, date?)` - **Batch: atualizar 1 stat em todos os 25 personagens**
+
+### Exemplo: Marcar Berkas Diário como Feito
+
+```json
+{
+  "tool": "update_stat_all_chars",
+  "username": "oGus",
+  "field_name": "status_berkas_diario",
+  "field_value": "Feito"
+}
+```
+
+Resposta:
+```json
+{
+  "updated_count": 25,
+  "char_names": ["Elesis", "Arme", "Lire", "Lass", "Ryan", "Ronan", "Amy", "Jin", "Sieghart", "Mari", "Dio", "Zero", "Ley", "Rufus", "Rin", "Asin", "Lime", "Edel", "Veigas", "Uno", "Decane", "Ai", "Kallia", "Iris", "Ereb"]
+}
+```
 
 ### Configuração Cliente MCP
 
@@ -176,10 +235,12 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 - **Username:** 1-50 chars, trim automático
 - **ATK values:** 0-999,999,999 (int)
 - **Andar WL:** 0-999 (smallint)
+- **Drops:** 0-99,999 (int, para acumulação)
 - **Date:** YYYY-MM-DD format
 - **Batch:** max 100 records por request
 - **Status fields:** max 100 chars
 - **Pagination limit:** max 100 por request
+- **Field names (batch update):** whitelist de 14 campos permitidos
 
 ## Testes
 
