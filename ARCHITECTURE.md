@@ -12,13 +12,13 @@ graph TB
     
     subgraph API["API REST Layer (Express.js + Node.js)"]
         Middleware[Middlewares<br/>Helmet, CORS, Auth, JSON Parser]
-        Routes[Routes<br/>/users, /characters, /stats, /stats/batch]
+        Routes[Routes<br/>/users, /characters, /stats, /stats/batch<br/>/stats/update-all-chars]
     end
     
     DB[(Supabase PostgreSQL<br/>Kimball Data Model)]
     
     subgraph MCP[MCP Server]
-        Tools[Tools: create_user, register_stats<br/>register_stats_batch, query_stats<br/>list_users, list_characters]
+        Tools[Tools: create_user, register_stats<br/>register_stats_batch, query_stats<br/>update_stat_all_chars<br/>list_users, list_characters]
     end
     
     Client -->|HTTP/HTTPS + X-API-Key| Middleware
@@ -66,6 +66,8 @@ erDiagram
         bigint user_id FK
         smallint char_id FK
         bigint time_id FK
+        smallint nivel
+        text status_despertar
         integer atk_total
         integer atk
         integer atk_sp
@@ -78,15 +80,16 @@ erDiagram
         text status_fornalha_infernal_semanal
         text status_altar_ruina_semanal
         text status_tod_diario
-        boolean drop_perg_prop_uni
+        integer drop_perg_prop_uni
         text status_abissal_semanal
-        boolean drop_grim_reaper_card
+        integer drop_grim_reaper_card
         text status_claustro_infinito_diario
         smallint nivel_claustro_infinito
         integer idas_calnat
         text status_brinco_caos
         text status_piercing_caos
         text status_solene_semanal
+        text status_berkas_diario
         timestamptz created_at
         timestamptz updated_at
     }
@@ -94,13 +97,15 @@ erDiagram
 
 ### Medidas por Categoria
 
+**Character Info:** `nivel`, `status_despertar`
+
 **Combat Stats:** `atk_total`, `atk`, `atk_sp`
 
 **Weekly Activities:** `status_void_unificado_semanal`, `cristais_void_unificado`, `status_void_4_semanal`, `cristais_void_4`, `status_wl_semanal`, `andar_wl`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
 
-**Daily Activities:** `status_tod_diario`, `status_claustro_infinito_diario`, `nivel_claustro_infinito`
+**Daily Activities:** `status_tod_diario`, `status_claustro_infinito_diario`, `nivel_claustro_infinito`, `status_berkas_diario`
 
-**Drops & Items:** `drop_perg_prop_uni`, `drop_grim_reaper_card`, `status_brinco_caos`, `status_piercing_caos`
+**Drops & Items:** `drop_perg_prop_uni` (int), `drop_grim_reaper_card` (int), `status_brinco_caos`, `status_piercing_caos`
 
 **Other:** `idas_calnat`
 
@@ -177,7 +182,25 @@ sequenceDiagram
     API-->>Client: {success: N, results: [...], errors: [...]}
 ```
 
-### 4. Consulta de Stats
+### 4. Batch Update (All Characters)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Express API
+    participant DB as Supabase
+
+    Client->>API: POST /api/stats/update-all-chars {username, field_name, field_value}
+    API->>API: Auth + Validation (field_name whitelist)
+    API->>DB: SELECT user_id FROM dim_users WHERE username = ?
+    DB-->>API: user_id
+    API->>DB: CALL update_stat_all_chars(user_id, field_name, field_value, date)
+    DB->>DB: FOR EACH character: UPSERT into fact_character_stats
+    DB-->>API: {updated_count: 25, char_names: [...]}
+    API-->>Client: 200 OK
+```
+
+### 5. Consulta de Stats
 
 ```mermaid
 sequenceDiagram
@@ -284,6 +307,10 @@ register_stats_batch(records: [...])
 
 query_stats(username?, char_name?, from_date?, to_date?)
   → GET /api/stats?filters
+
+update_stat_all_chars(username, field_name, field_value, date?)
+  → POST /api/stats/update-all-chars
+  → Batch: update 1 field for all 25 characters
 ```
 
 ### Configuração Cliente
@@ -369,9 +396,37 @@ graph LR
 
 1. **Agregações pré-computadas** (tabelas de sumário)
 2. **Cache layer** (Redis) para queries frequentes
-3. **Rate limiting** por API key
-4. **Webhooks** para notificações
-5. **GraphQL API** além do REST
-6. **Real-time subscriptions** via Supabase Realtime
-7. **Backup automático** de dados críticos
-8. **Dashboard web** para visualização
+3. **Webhooks** para notificações
+4. **GraphQL API** além do REST
+5. **Real-time subscriptions** via Supabase Realtime
+6. **Backup automático** de dados críticos
+7. **Dashboard web** para visualização
+
+## SQL Functions
+
+### `ensure_time_dimension(input_date DATE)`
+Auto-popula `dim_time` com year/month/week/day metadata. Chamada automaticamente em todos os registros de stats.
+
+### `update_stat_all_chars(p_username, p_field_name, p_field_value, p_date)`
+Batch update: atualiza 1 campo em todos os 25 personagens da conta.
+
+**Segurança:** Whitelist de 14 campos permitidos (SQL injection protection).
+
+**Campos permitidos:**
+- `nivel`, `status_despertar`
+- `status_void_unificado_semanal`, `status_void_4_semanal`, `status_wl_semanal`
+- `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`
+- `status_tod_diario`, `status_abissal_semanal`, `status_claustro_infinito_diario`
+- `status_brinco_caos`, `status_piercing_caos`
+- `status_solene_semanal`, `status_berkas_diario`
+
+**Exemplo:**
+```sql
+SELECT * FROM update_stat_all_chars(
+  'oGus', 
+  'status_berkas_diario', 
+  'Feito', 
+  '2026-10-04'
+);
+-- Retorna: {updated_count: 25, char_names: [...]}
+```
