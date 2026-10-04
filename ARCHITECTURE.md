@@ -1,29 +1,39 @@
-# Architecture - GrandChase Classic API
+# Architecture - GrandChase Classic API v1.2.0
 
 ## Overview
 
 Sistema de rastreamento de personagens e atividades do GrandChase Classic, construído com arquitetura RESTful e modelo dimensional Kimball para análise de dados históricos.
 
+**Versão:** 1.2.0  
+**Novidades:** Acessórios, Reset Automático, OCR via GPT-4o Vision
+
 ## Stack Tecnológico
 
 ```mermaid
 graph TB
-    Client[Cliente<br/>Agentes via MCP / HTTP Clients / Postman]
+    Client[Cliente<br/>Agentes via MCP / HTTP Clients / Discord Bot]
     
     subgraph API["API REST Layer (Express.js + Node.js)"]
-        Middleware[Middlewares<br/>Helmet, CORS, Auth, JSON Parser]
-        Routes[Routes<br/>/users, /characters, /stats, /stats/batch<br/>/stats/update-all-chars]
+        Middleware[Middlewares<br/>Helmet, CORS, Auth, Rate Limit, JSON Parser]
+        Routes[Routes<br/>/users, /characters, /stats, /stats/batch<br/>/stats/update-all-chars, /permissions<br/>/maintenance/reset-*, /ocr/extract-stats]
+    end
+    
+    subgraph External[External Services]
+        OpenAI[OpenAI GPT-4o Vision<br/>OCR Screenshots]
+        GitHub[GitHub Actions<br/>Automated Resets]
     end
     
     DB[(Supabase PostgreSQL<br/>Kimball Data Model)]
     
-    subgraph MCP[MCP Server]
-        Tools[Tools: create_user, register_stats<br/>register_stats_batch, query_stats<br/>update_stat_all_chars<br/>list_users, list_characters]
+    subgraph MCP[MCP Server - 12 Tools]
+        Tools[Discord Auth, Data CRUD<br/>Batch Updates, OCR Extraction<br/>Permission Management]
     end
     
     Client -->|HTTP/HTTPS + X-API-Key| Middleware
     Middleware --> Routes
     Routes -->|Supabase SDK| DB
+    Routes -->|API Calls| OpenAI
+    GitHub -->|Cron Schedule| Routes
     MCP -->|HTTP + X-API-Key| API
 ```
 
@@ -71,6 +81,7 @@ erDiagram
         integer atk_total
         integer atk
         integer atk_sp
+        numeric poder "GENERATED (atk+atk_sp)/10000"
         text status_void_unificado_semanal
         integer cristais_void_unificado
         text status_void_4_semanal
@@ -88,8 +99,13 @@ erDiagram
         integer idas_calnat
         text status_brinco_caos
         text status_piercing_caos
+        text status_anel
+        text tipo_anel
+        text status_tornozeleira
+        text tipo_tornozeleira
         text status_solene_semanal
         text status_berkas_diario
+        text anotacoes
         timestamptz created_at
         timestamptz updated_at
     }
@@ -97,7 +113,11 @@ erDiagram
 
 ### Medidas por Categoria
 
-**Character Info:** `nivel`, `status_despertar`
+**Character Info:** `nivel`, `status_despertar`, `poder` (calculated)
+
+**Accessories (v1.2.0):** `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
+
+**Notes (v1.2.0):** `anotacoes`
 
 **Combat Stats:** `atk_total`, `atk`, `atk_sp`
 
@@ -261,7 +281,7 @@ sequenceDiagram
 
 ```sql
 -- Progressão de ATK de um usuário ao longo do tempo
-SELECT dt.date, fcs.atk_total
+SELECT dt.date, fcs.atk_total, fcs.poder
 FROM fact_character_stats fcs
 JOIN dim_users du ON fcs.user_id = du.user_id
 JOIN dim_time dt ON fcs.time_id = dt.time_id
@@ -277,30 +297,54 @@ GROUP BY du.username, dc.char_name_ptbr
 ORDER BY max_atk DESC
 LIMIT 10;
 
--- Atividades semanais completadas por mês
-SELECT dt.year, dt.month, COUNT(*) as completed
+-- Ranking de missões completadas (histórico preservado v1.2.0)
+SELECT du.username, COUNT(*) as berkas_completed
 FROM fact_character_stats fcs
-JOIN dim_time dt ON fcs.time_id = dt.time_id
-WHERE fcs.status_void_unificado_semanal = 'completo'
-GROUP BY dt.year, dt.month;
+JOIN dim_users du ON fcs.user_id = du.user_id
+WHERE fcs.status_berkas_diario = 'Feito'
+  AND fcs.date >= '2026-10-01'
+GROUP BY du.username
+ORDER BY berkas_completed DESC;
+
+-- Distribuição de acessórios entre personagens
+SELECT dc.char_name_ptbr, fcs.tipo_anel, COUNT(*) as count
+FROM fact_character_stats fcs
+JOIN dim_characters dc ON fcs.char_id = dc.char_id
+WHERE fcs.tipo_anel IS NOT NULL AND fcs.status_anel = 'Obtido'
+GROUP BY dc.char_name_ptbr, fcs.tipo_anel;
 ```
 
-## MCP Server Integration
+## MCP Server Integration (v1.2.0 - 12 Tools)
 
 ### Tools Disponíveis
 
 ```javascript
-create_user(username)
+// Discord & Permissions (5 tools)
+create_discord_user(discord_id, discord_username)
+  → POST /api/discord/users
+
+create_user(username, discord_owner_id)
   → POST /api/users
 
+grant_permission(owner_discord_id, username, grant_to_discord_id)
+  → POST /api/permissions/grant
+
+revoke_permission(owner_discord_id, username, revoke_from_discord_id)
+  → POST /api/permissions/revoke
+
+list_permissions(username)
+  → GET /api/permissions/:username
+
+// Data Management (6 tools)
 list_users()
   → GET /api/users
 
 list_characters()
   → GET /api/characters
 
-register_stats(username, char_name, date, ...stats)
+register_stats(username, char_name, discord_id, date?, ...stats)
   → POST /api/stats
+  → v1.2.0: suporta acessórios + anotacoes
 
 register_stats_batch(records: [...])
   → POST /api/stats/batch
@@ -308,9 +352,14 @@ register_stats_batch(records: [...])
 query_stats(username?, char_name?, from_date?, to_date?)
   → GET /api/stats?filters
 
-update_stat_all_chars(username, field_name, field_value, date?)
+update_stat_all_chars(username, discord_id, field_name, field_value, date?)
   → POST /api/stats/update-all-chars
-  → Batch: update 1 field for all 25 characters
+  → v1.2.0: whitelist expandida (18 campos)
+
+// OCR & Automation (1 tool)
+extract_stats_from_image(image_url?, image_base64?, char_name?)
+  → POST /api/ocr/extract-stats
+  → v1.2.0: GPT-4o Vision, retorna atk/sp/nivel/despertar/acessórios + confidence
 ```
 
 ### Configuração Cliente
@@ -335,16 +384,21 @@ update_stat_all_chars(username, field_name, field_value, date?)
 ```mermaid
 graph LR
     GitHub[GitHub Repo<br/>gc-management-api]
+    Actions[GitHub Actions<br/>Daily 06:00 UTC<br/>Weekly Wed 06:00 UTC]
     
     Render[Render Web Service<br/>Auto-deploy on push<br/>Build: npm install<br/>Start: npm start]
     
     Supabase[(Supabase PostgreSQL<br/>Migrations applied<br/>RLS enabled<br/>Free tier)]
     
-    Env[Environment Variables<br/>SUPABASE_URL<br/>SUPABASE_SERVICE_KEY<br/>API_KEY]
+    OpenAI[OpenAI API<br/>GPT-4o Vision<br/>OCR Screenshots]
+    
+    Env[Environment Variables<br/>SUPABASE_URL<br/>SUPABASE_SERVICE_KEY<br/>API_KEY<br/>OPENAI_API_KEY]
     
     GitHub -->|git push| Render
+    Actions -->|POST /api/maintenance/reset-*| Render
     Env -.->|config| Render
     Render -->|Supabase SDK| Supabase
+    Render -->|Vision API| OpenAI
 ```
 
 ## Custos Estimados
@@ -353,12 +407,16 @@ graph LR
 |---------|------|-------|
 | Supabase | Free | $0 (até 500MB DB, 2GB transfer) |
 | Render | Free | $0 (750h/mês, sleep após inatividade) |
-| **Total** | | **$0/mês** |
+| GitHub Actions | Free | $0 (~1 min/mês de 2000 min quota) |
+| OpenAI OCR | Pay-as-you-go | ~$0.003-0.01/imagem |
+| **Total fixo** | | **$0/mês** |
+| **Total com OCR** | | **~$0.10-1/mês** (10-100 imagens) |
 
 ### Limites Free Tier
 
 - **Supabase**: 500MB storage, 2GB bandwidth, 50K requests/dia
 - **Render**: 750h/mês, sleep após 15min inatividade, 512MB RAM
+- **GitHub Actions**: 2000 min/mês (cron usa ~1 min/mês)
 
 ## Personagens (25 Total)
 
@@ -392,15 +450,16 @@ graph LR
 
 ## Extensibilidade Futura
 
-### Possíveis Adições
+### Roadmap
 
-1. **Agregações pré-computadas** (tabelas de sumário)
-2. **Cache layer** (Redis) para queries frequentes
-3. **Webhooks** para notificações
-4. **GraphQL API** além do REST
-5. **Real-time subscriptions** via Supabase Realtime
-6. **Backup automático** de dados críticos
-7. **Dashboard web** para visualização
+1. **Discord Bot** (fase seguinte): canal de Q&A baseado em RAG + gestão via bot
+2. **Aplicação mobile/web** (fase seguinte): dashboard de visualização
+3. **Rankings de missões**: agregações sobre histórico preservado
+4. **Agregações pré-computadas** (tabelas de sumário)
+5. **Cache layer** (Redis) para queries frequentes
+6. **Webhooks** para notificações
+7. **GraphQL API** além do REST
+8. **Real-time subscriptions** via Supabase Realtime
 
 ## SQL Functions
 
@@ -410,15 +469,16 @@ Auto-popula `dim_time` com year/month/week/day metadata. Chamada automaticamente
 ### `update_stat_all_chars(p_username, p_field_name, p_field_value, p_date)`
 Batch update: atualiza 1 campo em todos os 25 personagens da conta.
 
-**Segurança:** Whitelist de 14 campos permitidos (SQL injection protection).
+**Segurança:** Whitelist de 18 campos permitidos (SQL injection protection).
 
-**Campos permitidos:**
+**Campos permitidos (v1.2.0):**
 - `nivel`, `status_despertar`
 - `status_void_unificado_semanal`, `status_void_4_semanal`, `status_wl_semanal`
 - `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`
 - `status_tod_diario`, `status_abissal_semanal`, `status_claustro_infinito_diario`
 - `status_brinco_caos`, `status_piercing_caos`
 - `status_solene_semanal`, `status_berkas_diario`
+- `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira` (v1.2.0)
 
 **Exemplo:**
 ```sql
@@ -430,3 +490,14 @@ SELECT * FROM update_stat_all_chars(
 );
 -- Retorna: {updated_count: 25, char_names: [...]}
 ```
+
+### `reset_field_all_users(p_field_name, p_field_value, p_date)` (v1.2.0)
+Reset automático: cria novos registros com status resetado para TODOS os usuários × personagens.
+
+**Preserva histórico:** Não deleta registros antigos. Cria novos para a data alvo.
+
+**Campos resetáveis (10):**
+- Weekly: `status_void_unificado_semanal`, `status_void_4_semanal`, `status_wl_semanal`, `status_fornalha_infernal_semanal`, `status_altar_ruina_semanal`, `status_abissal_semanal`, `status_solene_semanal`
+- Daily: `status_tod_diario`, `status_claustro_infinito_diario`, `status_berkas_diario`
+
+**Uso:** Chamada pelos endpoints `/api/maintenance/reset-weekly` e `/reset-daily`, executados via GitHub Actions cron.

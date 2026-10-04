@@ -1,9 +1,10 @@
-# GrandChase Classic - Character Tracker API
+# GrandChase Classic - Character Tracker API v1.2.0
 
 API REST para rastreamento de personagens e atividades do GrandChase Classic com banco de dados Kimball dimensional.
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-52.63%25-yellow)]()
+[![Version](https://img.shields.io/badge/version-1.2.0-blue)]()
 
 ## Características
 
@@ -12,15 +13,39 @@ API REST para rastreamento de personagens e atividades do GrandChase Classic com
 ✅ **Discord Authentication** (ownership + permission system)  
 ✅ **Suporte a caracteres coreanos** em usernames  
 ✅ **API REST** com autenticação via API Key  
-✅ **MCP Server** para integração com agentes  
+✅ **MCP Server** para integração com agentes (12 tools)  
 ✅ **Batch updates** (1 stat para todos os 25 personagens da conta)  
+✅ **Reset automático** semanal/diário (GitHub Actions)  
+✅ **OCR de screenshots** (GPT-4o Vision)  
 ✅ **Rate limiting** (100 req/15min global, 5 req/15min auth)  
 ✅ **Input validation** (Zod schemas)  
 ✅ **Paginação** (cursor-based com offset/limit)  
 ✅ **Logging estruturado** (Pino)  
 ✅ **Testes unitários** (Jest + 13 tests)  
 ✅ **RLS habilitado** para segurança  
-✅ **Custo zero** (free tier Supabase + Render)
+✅ **Custo zero** (free tier Supabase + Render + GitHub Actions)
+
+## Novidades v1.2.0
+
+🎉 **Acessórios:**
+- Campos: `status_anel`, `tipo_anel`, `status_tornozeleira`, `tipo_tornozeleira`
+- Tipos suportados: Esmaecido, Silencioso, Sangrento, Caos (anel) / Eternidade, Redenção, Perfeição, Caos (tornozeleira)
+
+🎉 **Notas por Personagem:**
+- Campo `anotacoes` (TEXT, max 5000 chars)
+
+🎉 **Poder Calculado:**
+- Campo `poder` (read-only, auto: (atk + atk_sp) / 10000)
+
+🎉 **Reset Automático:**
+- Endpoints `/api/maintenance/reset-weekly` e `/reset-daily`
+- GitHub Actions agendadas (quartas 03:00, diário 03:00 BRT)
+- Preserva histórico completo para rankings
+
+🎉 **OCR de Screenshots:**
+- Endpoint `/api/ocr/extract-stats`
+- Extrai atributos de prints via GPT-4o Vision
+- Confidence score incluído
 
 ## Quick Start
 
@@ -389,22 +414,27 @@ Requer `OPENAI_API_KEY` no `.env`. Se não configurado, endpoint retorna 503.
 
 ## MCP Server Tools
 
-### Discord & Permissions
+**Total: 12 ferramentas disponíveis**
+
+### Discord & Permissions (5 tools)
 - `create_discord_user(discord_id, discord_username, ...)` - Registrar usuário Discord
 - `create_user(username, discord_owner_id)` - Criar conta de jogo vinculada a Discord owner
 - `grant_permission(owner_discord_id, username, grant_to_discord_id)` - Conceder permissão
 - `revoke_permission(owner_discord_id, username, revoke_from_discord_id)` - Revogar permissão
 - `list_permissions(username)` - Listar permissões de uma conta
 
-### Data Management
+### Data Management (6 tools)
 - `list_users()` - Listar usuários
 - `list_characters()` - Listar personagens
-- `register_stats(username, char_name, discord_id, date, ...stats)` - Registrar stats individual (**requer discord_id**)
+- `register_stats(username, char_name, discord_id, date, ...stats)` - Registrar stats individual (**requer discord_id**, agora inclui acessórios + anotacoes)
 - `register_stats_batch(records: [...])` - Registrar stats em lote
 - `query_stats(username?, char_name?, from_date?, to_date?)` - Consultar stats
-- `update_stat_all_chars(username, discord_id, field_name, field_value, date?)` - **Batch: atualizar 1 stat em todos os 25 personagens** (**requer discord_id**)
+- `update_stat_all_chars(username, discord_id, field_name, field_value, date?)` - **Batch: atualizar 1 stat em todos os 25 personagens** (**requer discord_id**, agora suporta acessórios)
 
-### Exemplo: Workflow Completo
+### OCR & Automation (1 tool)
+- `extract_stats_from_image(image_url?, image_base64?, char_name?)` - **Extrair stats de screenshot via GPT-4o Vision** (retorna: atk, atk_sp, nivel, despertar, acessórios, confidence)
+
+### Exemplos de Uso
 
 **1. Registrar Discord user:**
 ```json
@@ -424,7 +454,16 @@ Requer `OPENAI_API_KEY` no `.env`. Se não configurado, endpoint retorna 503.
 }
 ```
 
-**3. Marcar Berkas como Feito (todos os personagens):**
+**3. Extrair stats de screenshot (OCR):**
+```json
+{
+  "tool": "extract_stats_from_image",
+  "image_url": "https://i.imgur.com/screenshot.png",
+  "char_name": "Elesis"
+}
+```
+
+**4. Marcar Berkas como Feito (todos os personagens):**
 ```json
 {
   "tool": "update_stat_all_chars",
