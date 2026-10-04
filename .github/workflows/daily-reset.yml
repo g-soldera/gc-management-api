@@ -1,0 +1,32 @@
+name: Daily Reset
+
+on:
+  schedule:
+    # Todos os dias às 03:00 BRT (06:00 UTC)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Permite trigger manual
+
+jobs:
+  reset-daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Daily Reset
+        run: |
+          response=$(curl -X POST \
+            -H "X-API-Key: ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            ${{ secrets.API_URL }}/api/maintenance/reset-daily)
+          
+          http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d: -f2)
+          body=$(echo "$response" | sed '/HTTP_STATUS:/d')
+          
+          echo "Response: $body"
+          echo "HTTP Status: $http_status"
+          
+          if [ "$http_status" != "200" ]; then
+            echo "Error: Daily reset failed with status $http_status"
+            exit 1
+          fi
+          
+          echo "Daily reset completed successfully"

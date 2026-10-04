@@ -1,0 +1,32 @@
+name: Weekly Reset
+
+on:
+  schedule:
+    # Quartas-feiras às 03:00 BRT (06:00 UTC)
+    - cron: '0 6 * * 3'
+  workflow_dispatch: # Permite trigger manual
+
+jobs:
+  reset-weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Weekly Reset
+        run: |
+          response=$(curl -X POST \
+            -H "X-API-Key: ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            ${{ secrets.API_URL }}/api/maintenance/reset-weekly)
+          
+          http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d: -f2)
+          body=$(echo "$response" | sed '/HTTP_STATUS:/d')
+          
+          echo "Response: $body"
+          echo "HTTP Status: $http_status"
+          
+          if [ "$http_status" != "200" ]; then
+            echo "Error: Weekly reset failed with status $http_status"
+            exit 1
+          fi
+          
+          echo "Weekly reset completed successfully"

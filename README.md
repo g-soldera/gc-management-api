@@ -576,9 +576,33 @@ Ver `ARCHITECTURE.md` para diagramas Mermaid completos do modelo Kimball, fluxos
 
 O sistema preserva histórico completo. Resets criam novos registros sem deletar dados antigos.
 
-### Configuração via EasyCron (Recomendado)
+### Configuração via GitHub Actions (Recomendado - Grátis)
 
-**1. Reset Semanal (Quartas 03:00 BRT):**
+**Status:** ✅ Configurado automaticamente neste repo
+
+As Actions rodam automaticamente:
+- **Daily Reset:** Todos os dias às 03:00 BRT (06:00 UTC)
+- **Weekly Reset:** Quartas-feiras às 03:00 BRT (06:00 UTC)
+
+**Configuração necessária (GitHub Secrets):**
+1. Vá em `Settings` → `Secrets and variables` → `Actions`
+2. Adicione:
+   - `API_KEY`: Sua API key (mesmo valor do `.env`)
+   - `API_URL`: `https://gc-classic-api.onrender.com` (ou sua URL do Render)
+
+**Trigger manual:**
+- Vá em `Actions` → escolha workflow → `Run workflow`
+
+**Logs:**
+- Vá em `Actions` para ver execuções e logs
+
+**Limites GitHub Actions (Free tier):**
+- 2000 minutos/mês (suficiente para ~60,000 execuções de 2 segundos)
+- Este cron usa ~30 execuções/mês = ~1 minuto total
+
+### Alternativas
+
+**EasyCron (se GitHub Actions falhar):**
 ```
 URL: https://gc-classic-api.onrender.com/api/maintenance/reset-weekly
 Method: POST
@@ -587,19 +611,15 @@ Timezone: America/Sao_Paulo
 Headers: X-API-Key: YOUR_API_KEY
 ```
 
-**2. Reset Diário (Todos os dias 03:00 BRT):**
+**Supabase pg_cron (avançado):**
+```sql
+SELECT cron.schedule('daily-reset', '0 6 * * *', 
+  $$ SELECT net.http_post(
+    url:='https://gc-classic-api.onrender.com/api/maintenance/reset-daily',
+    headers:='{"X-API-Key": "YOUR_KEY"}'::jsonb
+  ) $$
+);
 ```
-URL: https://gc-classic-api.onrender.com/api/maintenance/reset-daily
-Method: POST
-Schedule: 0 3 * * * (every day at 03:00)
-Timezone: America/Sao_Paulo
-Headers: X-API-Key: YOUR_API_KEY
-```
-
-**Alternativas:**
-- **Render Cron Jobs** (plano pago)
-- **GitHub Actions** (workflow agendado)
-- **Supabase Edge Functions** (pg_cron)
 
 ### Comportamento do Reset
 
