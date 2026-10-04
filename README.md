@@ -9,6 +9,7 @@ API REST para rastreamento de personagens e atividades do GrandChase Classic com
 
 ✅ **25 personagens** do GrandChase Classic  
 ✅ **Modelo dimensional Kimball** (star schema otimizado)  
+✅ **Discord Authentication** (ownership + permission system)  
 ✅ **Suporte a caracteres coreanos** em usernames  
 ✅ **API REST** com autenticação via API Key  
 ✅ **MCP Server** para integração com agentes  
@@ -49,6 +50,16 @@ Todos os endpoints protegidos requerem header:
 X-API-Key: sua-chave-secreta
 ```
 
+### Sistema de Permissões Discord
+
+**Conceito:** Cada conta de jogo (username) é vinculada a um usuário Discord (owner). Apenas o owner ou usuários autorizados por ele podem modificar stats.
+
+**Fluxo:**
+1. Registrar usuário Discord: `POST /api/discord/users`
+2. Criar conta de jogo vinculada ao Discord: `POST /api/users` (com `discord_owner_id`)
+3. Modificar stats: requer `discord_id` nos endpoints de escrita
+4. Owner pode conceder permissões: `POST /api/permissions/grant`
+
 ### `GET /health`
 Health check (sem autenticação)
 ```json
@@ -59,11 +70,23 @@ Health check (sem autenticação)
 }
 ```
 
-### `POST /api/users`
-Criar usuário (suporta caracteres coreanos)
+### `POST /api/discord/users`
+Registrar usuário Discord no sistema (upsert)
 ```json
 {
-  "username": "PlayerKR한국"
+  "discord_id": "123456789012345678",
+  "discord_username": "PlayerDiscord",
+  "discord_discriminator": "0001",
+  "discord_avatar": "abc123"
+}
+```
+
+### `POST /api/users`
+Criar conta de jogo vinculada a Discord owner
+```json
+{
+  "username": "PlayerKR한국",
+  "discord_owner_id": "123456789012345678"
 }
 ```
 
@@ -75,12 +98,70 @@ Listar todos os usuários
 ### `GET /api/characters`
 Listar 25 personagens (ptbr/enus)
 
+### `POST /api/permissions/grant`
+Owner concede permissão a outro usuário Discord
+```json
+{
+  "owner_discord_id": "123456789012345678",
+  "username": "PlayerKR",
+  "grant_to_discord_id": "987654321098765432"
+}
+```
+
+**Resposta:**
+```json
+{
+  "permission_id": 1,
+  "granted": true,
+  "message": "Permission granted"
+}
+```
+
+### `POST /api/permissions/revoke`
+Owner revoga permissão
+```json
+{
+  "owner_discord_id": "123456789012345678",
+  "username": "PlayerKR",
+  "revoke_from_discord_id": "987654321098765432"
+}
+```
+
+### `GET /api/permissions/:username`
+Listar permissões de uma conta
+```
+GET /api/permissions/PlayerKR
+```
+
+**Resposta:**
+```json
+{
+  "username": "PlayerKR",
+  "owner_discord_id": "123456789012345678",
+  "permissions": [
+    {
+      "permission_id": 1,
+      "granted_to": {
+        "discord_id": "987654321098765432",
+        "discord_username": "Friend"
+      },
+      "granted_by": {
+        "discord_id": "123456789012345678",
+        "discord_username": "Owner"
+      },
+      "granted_at": "2026-10-04T06:00:00Z"
+    }
+  ]
+}
+```
+
 ### `POST /api/stats`
-Registrar stats de personagem (atualização parcial suportada)
+Registrar stats de personagem (**requer discord_id para autorização**)
 ```json
 {
   "username": "PlayerKR",
   "char_name": "Elesis",
+  "discord_id": "123456789012345678",
   "date": "2026-10-04",
   "nivel": 90,
   "status_despertar": "Despertado",
@@ -92,6 +173,8 @@ Registrar stats de personagem (atualização parcial suportada)
   "status_berkas_diario": "Feito"
 }
 ```
+
+**Autorização:** Owner ou usuário com permissão concedida.
 
 **Campos suportados:**
 - Combat: `nivel`, `status_despertar`, `atk_total`, `atk`, `atk_sp`
@@ -137,15 +220,18 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 - `offset` (opcional, padrão 0)
 
 ### `POST /api/stats/update-all-chars`
-**Atualizar 1 campo em todos os 25 personagens da conta**
+**Atualizar 1 campo em todos os 25 personagens da conta** (**requer discord_id para autorização**)
 ```json
 {
   "username": "PlayerKR",
+  "discord_id": "123456789012345678",
   "field_name": "status_berkas_diario",
   "field_value": "Feito",
   "date": "2026-10-04"
 }
 ```
+
+**Autorização:** Owner ou usuário com permissão concedida.
 
 **Exemplo de uso:** Marcar Berkas como "Feito" para todos os personagens em uma única chamada.
 
@@ -165,22 +251,59 @@ GET /api/stats?username=Player1&char_name=Elesis&limit=20&offset=0
 
 ## MCP Server Tools
 
-- `create_user(username)` - Criar usuário
+### Discord & Permissions
+- `create_discord_user(discord_id, discord_username, ...)` - Registrar usuário Discord
+- `create_user(username, discord_owner_id)` - Criar conta de jogo vinculada a Discord owner
+- `grant_permission(owner_discord_id, username, grant_to_discord_id)` - Conceder permissão
+- `revoke_permission(owner_discord_id, username, revoke_from_discord_id)` - Revogar permissão
+- `list_permissions(username)` - Listar permissões de uma conta
+
+### Data Management
 - `list_users()` - Listar usuários
 - `list_characters()` - Listar personagens
-- `register_stats(username, char_name, date, ...stats)` - Registrar stats individual
+- `register_stats(username, char_name, discord_id, date, ...stats)` - Registrar stats individual (**requer discord_id**)
 - `register_stats_batch(records: [...])` - Registrar stats em lote
 - `query_stats(username?, char_name?, from_date?, to_date?)` - Consultar stats
-- `update_stat_all_chars(username, field_name, field_value, date?)` - **Batch: atualizar 1 stat em todos os 25 personagens**
+- `update_stat_all_chars(username, discord_id, field_name, field_value, date?)` - **Batch: atualizar 1 stat em todos os 25 personagens** (**requer discord_id**)
 
-### Exemplo: Marcar Berkas Diário como Feito
+### Exemplo: Workflow Completo
 
+**1. Registrar Discord user:**
+```json
+{
+  "tool": "create_discord_user",
+  "discord_id": "123456789012345678",
+  "discord_username": "PlayerDiscord"
+}
+```
+
+**2. Criar conta de jogo:**
+```json
+{
+  "tool": "create_user",
+  "username": "oGus",
+  "discord_owner_id": "123456789012345678"
+}
+```
+
+**3. Marcar Berkas como Feito (todos os personagens):**
 ```json
 {
   "tool": "update_stat_all_chars",
   "username": "oGus",
+  "discord_id": "123456789012345678",
   "field_name": "status_berkas_diario",
   "field_value": "Feito"
+}
+```
+
+**4. Conceder permissão a um amigo:**
+```json
+{
+  "tool": "grant_permission",
+  "owner_discord_id": "123456789012345678",
+  "username": "oGus",
+  "grant_to_discord_id": "987654321098765432"
 }
 ```
 
@@ -212,8 +335,13 @@ Resposta:
 ## Segurança
 
 - ✅ API Key obrigatória (header `X-API-Key`)
+- ✅ **Discord Authentication** (ownership por Discord ID)
+- ✅ **Permission System** (whitelist por conta, grant/revoke via SQL functions)
+- ✅ **Authorization Middleware** (valida owner ou permissão concedida antes de modificações)
 - ✅ Rate limiting (100 req/15min global, 5 req/15min auth)
 - ✅ Input validation (Zod schemas com ranges e tamanhos)
+- ✅ **Discord ID validation** (snowflake 17-20 digits)
+- ✅ **SQL Injection protection** (field_name whitelist, prepared statements)
 - ✅ RLS habilitado em todas as tabelas
 - ✅ Service role key apenas no backend
 - ✅ Helmet.js (headers de segurança)
