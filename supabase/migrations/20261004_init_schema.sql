@@ -10,7 +10,7 @@ CREATE TABLE dim_users (
 
 CREATE INDEX idx_dim_users_username ON dim_users(username);
 
--- Dimension: Characters (19 GrandChase Classic characters)
+-- Dimension: Characters (25 GrandChase Classic characters)
 CREATE TABLE dim_characters (
   char_id SMALLSERIAL PRIMARY KEY,
   char_name_ptbr TEXT NOT NULL,
@@ -20,8 +20,8 @@ CREATE TABLE dim_characters (
 
 INSERT INTO dim_characters (char_name_ptbr, char_name_enus) VALUES
   ('Elesis', 'Elesis'),
-  ('Lire', 'Lire'),
   ('Arme', 'Arme'),
+  ('Lire', 'Lire'),
   ('Lass', 'Lass'),
   ('Ryan', 'Ryan'),
   ('Ronan', 'Ronan'),
@@ -31,13 +31,19 @@ INSERT INTO dim_characters (char_name_ptbr, char_name_enus) VALUES
   ('Mari', 'Mari'),
   ('Dio', 'Dio'),
   ('Zero', 'Zero'),
+  ('Rey', 'Ley'),
+  ('Lupus', 'Rufus'),
+  ('Lin', 'Rin'),
   ('Azin', 'Asin'),
   ('Holy', 'Lime'),
-  ('Lupus', 'Rufus'),
-  ('Rey', 'Ley'),
-  ('Lin', 'Rin'),
+  ('Edel', 'Edel'),
   ('Veigas', 'Veigas'),
-  ('Edel', 'Edel');
+  ('Uno', 'Uno'),
+  ('Decane', 'Decane'),
+  ('Ai', 'Ai'),
+  ('Kallia', 'Kallia'),
+  ('Iris', 'Iris'),
+  ('Ereb', 'Ereb');
 
 -- Dimension: Time
 CREATE TABLE dim_time (

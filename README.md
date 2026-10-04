@@ -160,11 +160,11 @@ Consultar stats com filtros
 ### Outros
 - `idas_calnat`
 
-## Personagens GrandChase Classic
+## Personagens GrandChase Classic (25)
 
-**PT-BR:** Elesis, Lire, Arme, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Azin, Holy, Lupus, Rey, Lin, Veigas, Edel
+**PT-BR:** Elesis, Arme, Lire, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Rey, Lupus, Lin, Azin, Holy, Edel, Veigas, Uno, Decane, Ai, Kallia, Iris, Ereb
 
-**EN-US:** Elesis, Lire, Arme, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Asin, Lime, Rufus, Ley, Rin, Veigas, Edel
+**EN-US:** Elesis, Arme, Lire, Lass, Ryan, Ronan, Amy, Jin, Sieghart, Mari, Dio, Zero, Ley, Rufus, Rin, Asin, Lime, Edel, Veigas, Uno, Decane, Ai, Kallia, Iris, Ereb
 
 ## Licença
 
